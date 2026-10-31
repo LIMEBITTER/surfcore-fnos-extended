@@ -4,6 +4,22 @@
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 发布规则见 [docs/guides/VERSIONS.md](docs/guides/VERSIONS.md)。
 
+## [0.8.4-linux] - 2026-11-01
+
+### 新增
+
+- **QQ 私聊 B站 工具**：`qq_bili_search` / `qq_bili_video` / `qq_bili_feed` / `qq_bili_like` / `qq_bili_post`（发动态/评论，支持 `dryRun` 预览）；复用四本账、出站身份闸与审计；
+- **设置页「QQ 手动工具（B站）」卡片**：总开关、工具说明、最近操作记录。
+
+### 变更（Linux-only fork）
+
+- 扫码登录改为 Linux 浏览器发现（chromium / chrome / edge / brave / snap，支持 `SURFCORE_BROWSER`），headless 失败回退，进程组清理；
+- 移除 Windows 兼容层：打开浏览器只用 `xdg-open`，语音启动/停止在 Linux 结构化拒绝并给手动 `python -m voxd` 命令，更新解压用 `unzip`、应用更新用递归复制；
+- README 重构为 fork 视角（上游介绍改为链接）；
+- 版本号后缀 `-linux` 标识本 fork；回归 108/108。
+
+> 调查记录：[Linux（fnOS）适配](docs/cases/2026-11-01-linux-adaptation.md)
+
 ## [0.8.4] - 2026-11-01
 
 ### 修复（点「保存全部」人格核心被清空/覆盖）
