@@ -2,9 +2,9 @@
 
 **中文** | [English](README.en.md)
 
-> 🍴 **本仓库是 [LIMEBITTER/surfcore-linux](https://github.com/LIMEBITTER/surfcore-linux) —— [Mieksido/surfcore](https://github.com/Mieksido/surfcore) 的个人 fork。**
-> 上游只读：分支、提交、PR 都只发生在 fork 内，**不向上游推分支、不提 PR、不合并回上游**。
-> 本 fork 与上游的差异、同步方法、已知限制见 [十一、Fork 说明](#十一fork-说明)。
+> 🍴 **本仓库是 [LIMEBITTER/surfcore-linux](https://github.com/LIMEBITTER/surfcore-linux)，派生自 [Mieksido/surfcore](https://github.com/Mieksido/surfcore)；2026-11-01 已 Leave fork network，是独立仓库，与上游在 GitHub 上再无关联。**
+> 上游只读：分支、提交、PR 都只在本仓库里，**不向上游推分支、不提 PR、不合并回上游**。
+> 本仓库与上游的差异、同步方法、已知限制见 [十一、Fork 说明](#十一fork-说明)。
 
 > 一句话：**它不是"把大模型接进 QQ"的机器人框架，而是给模型一个身份、一套会遗忘的记忆、
 > 一份作息、两只手（QQ / B站）和一个能坐在你桌面上的分身。**
@@ -15,7 +15,7 @@
 | 目标 DSH | `0.2.1-rc.2 或更新（rc.3 已能安装，功能未完整回归）`（`npm run verify:adaptation` 可逐项复核） |
 | 平台 | Windows（沙箱 ACL / SnowLuma / 启动脚本都与它绑定） |
 | 许可 | MIT（SnowLuma 是第三方专有运行时，**不随本仓库分发**） |
-| 上游 | [Mieksido/surfcore](https://github.com/Mieksido/surfcore)（本仓库是它的个人 fork：只同步，不回流） |
+| 上游 | [Mieksido/surfcore](https://github.com/Mieksido/surfcore)（派生自它；已脱离 fork 网络，只同步、不回流） |
 | 配套仓库 | [surfvoicelocal](https://github.com/Mieksido/surfvoicelocal) · [surfvoicecloud](https://github.com/Mieksido/surfvoicecloud) · [surfpet](https://github.com/Mieksido/surfpet) |
 
 > 🔒 **本仓库不含任何真实数据**：角色卡是脱敏示例（`roles/`），记忆卡是空壳（`examples/`），
@@ -402,24 +402,28 @@ node scripts/setup-dsh.mjs      # 重装 preset + MCP
 
 ## 十一、Fork 说明
 
-本仓库是 **[LIMEBITTER/surfcore-linux](https://github.com/LIMEBITTER/surfcore-linux)**，上游是
+本仓库是 **[LIMEBITTER/surfcore-linux](https://github.com/LIMEBITTER/surfcore-linux)**，派生自
 **[Mieksido/surfcore](https://github.com/Mieksido/surfcore)**。上游是别人的项目，这里只**读**不**写**。
+
+> 2026-11-01 已在 GitHub 设置里执行 **Leave fork network**：本仓库现在是独立仓库，上游的 Forks 列表、
+> Network 图里都不再出现它。该操作不可逆——不能再加回 fork 网络、不能向上游开 PR；同步改走 11.3。
 
 ### 11.1 边界：只往 fork 写
 
 | 动作 | 允许 | 说明 |
 | --- | --- | --- |
 | 提交 / 推送 `LIMEBITTER/surfcore-linux` | ✅ | 功能在分支上做，合入 `main` 后再推 `origin` |
-| 向 `Mieksido/surfcore` 推分支 | ❌ | 不配 upstream 的推送地址 |
+| 向 `Mieksido/surfcore` 推分支 | ❌ | `upstream` 只留 fetch，push 地址设为 `no_push`（误推直接失败） |
 | 向上游提 PR / 合并回上游 | ❌ | fork 的改动不回流 |
 | 从上游同步代码 | ✅ | 只读 `fetch`，见 11.3 |
 
-### 11.2 本 fork 与上游的差异
+### 11.2 本仓库与上游的差异
 
 | 位置 | 差异 |
 | --- | --- |
-| `main`（已合入） | 仅文档：本节 + README 的 fork 提示与安装入口 + `scripts/bootstrap.ps1` 指向本仓库 |
-| `feat/qq-bili-tools`（未合入） | QQ 私聊 B站 工具 `qq_bili_search/video/feed/like/post`、`bili like` 命令、动态发布前的身份闸；见 [QQ-BILI-TOOLS.md](docs/guides/QQ-BILI-TOOLS.md) |
+| `main`：文档 | 本节 + README 的 fork 提示与安装入口 + `scripts/bootstrap.ps1` 指向本仓库 |
+| `main`：功能 | QQ 私聊 B站 工具 `qq_bili_search/video/feed/like/post`、`bili like` 命令、动态发布前的身份闸；见 [QQ-BILI-TOOLS.md](docs/guides/QQ-BILI-TOOLS.md)。2026-11-01 由 `feat/qq-bili-tools` 合入（合并提交 `5acdeb3`） |
+| `feat/qq-bili-tools` | 已合入，保留作记录，可以删 |
 
 ### 11.3 同步上游
 
@@ -429,13 +433,17 @@ git fetch upstream
 git merge --ff-only upstream/main                                  # 本地 main 没有额外提交时是快进
 ```
 
-> `main` 上已经有本节这类 fork 提交时，`--ff-only` 会拒绝；改用
+> 已脱离 fork 网络，网页上的 **Sync fork** 按钮不会再出现——同步只有本地这一条路；
+> `upstream` 的 push 地址已设为 `no_push`，误推会直接报错。
+>
+> `main` 上已经有本节这类提交时，`--ff-only` 会拒绝；改用
 > `git rebase upstream/main`（把 fork 提交挪到上游之上）或 `git merge upstream/main`（生成合并提交）。
 > **不要**为了"同步干净"丢掉 fork 自己的提交。
 
 ### 11.4 已知限制
 
-- **安装入口**：README 与 `scripts/bootstrap.ps1` 都克隆本仓库，装到的是 fork 的 `main`。
+- **安装入口**：README 与 `scripts/bootstrap.ps1` 都克隆本仓库，装到的是本仓库的 `main`。
 - **更新检查**：插件里的 `versionRepo` 仍指向上游（`Mieksido/surfcore`），用来提示"上游有新版本"；
-  真正的 `git pull --ff-only` 会因为本 fork 有本地提交而失败 —— 这是预期行为，同步请走 11.3。
-- **Release**：本 fork 没有自己的 Release / tag，别照 [RELEASE.md](docs/RELEASE.md) 往上游发版。
+  真正的 `git pull --ff-only` 会因为本仓库有本地提交而失败 —— 这是预期行为，同步请走 11.3。
+- **Release**：本仓库没有自己的 Release / tag，别照 [RELEASE.md](docs/RELEASE.md) 往上游发版。
+- **GitHub 可见性**：已脱离 fork 网络，上游的 Forks 列表与 Network 图里不再出现本仓库；仓库本身仍是公开的。
