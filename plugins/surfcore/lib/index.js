@@ -1480,7 +1480,11 @@ ${body}`;
     const qqCfg = readQqConfig().config ?? {};
     const snow = qqCfg.snowluma ?? {};
     let snowState = { state: 'unknown', hint: '' };
-    try { snowState = await diagnoseSnowLuma(snow); } catch {}
+    try {
+      // 本机补丁（2026-11-01，0.8.4 重新应用）：用桥接实时状态，避免把配置对象误判成 onebot-rejected
+      const live = await bridgeStatus().catch(() => null);
+      snowState = await diagnoseSnowLuma(live?.snowluma ?? {}).catch(() => snowState);
+    } catch {}
     const bridgeSrc = path.join(QQBOT_ROOT, 'src', 'bridge.js');
     return buildInstallChecks({
       nodeVersion: process.versions.node,
@@ -1494,7 +1498,8 @@ ${body}`;
       bridgeSrc: fs.existsSync(bridgeSrc),
       bridgeMasked: maskPath(bridgeSrc),
       profile: dshProfileWithSurfcore(),
-      token: String(qqCfg.consoleToken ?? '').trim(),
+      // 本机补丁（2026-11-01，0.8.4 重新应用）：桥接自动生成的令牌在 state/console-token
+      token: String(consoleToken() ?? '').trim(),
     });
   }
 
@@ -1615,7 +1620,7 @@ ${body}`;
     const qqCfg = readQqConfig().config ?? {};
     const actions = planDoctorFix({
       hasUnified: readUnified().hasUserFile,
-      hasToken: Boolean(String(qqCfg.consoleToken ?? '').trim()),
+      hasToken: Boolean(String(consoleToken() ?? '').trim()),
       ownerQQ: body?.ownerQQ,
       currentOwnerQQ: all.unified?.admin?.qq,
     });
@@ -1638,7 +1643,14 @@ ${body}`;
       add('B站配置', fs.existsSync(BILI_CONFIG), maskPath(BILI_CONFIG));
       add('B站 cookie', fs.existsSync(BILI_CRED), fs.existsSync(BILI_CRED) ? '已写入（不回显内容）' : '未写入');
       add('人设卡', fs.existsSync(resolvePersonaFile()), maskPath(resolvePersonaFile()));
-      add('身份对齐表', fs.existsSync(ALIGN_FILE), maskPath(ALIGN_FILE));
+      {
+        // 本机补丁（2026-11-01，0.8.4 重新应用）：对齐表是可选项，缺失不算失败，也不创建空文件
+        const alignFile = ALIGN_FILE;
+        let alignCount = 0;
+        try { alignCount = (JSON.parse(fs.readFileSync(alignFile, 'utf8'))?.links ?? []).length; } catch {}
+        add('身份对齐表（可选）', true,
+          fs.existsSync(alignFile) ? `${maskPath(alignFile)}（${alignCount} 条映射）` : '未建立（可选：QQ⇄B站身份映射，不影响运行）');
+      }
       const qqMemoryOn = readAll().unified.memory?.qqToBili?.enabled === true;
       add('QQ→B站记忆', qqMemoryOn ? fs.existsSync(activeMemoryPaths().qqForBili) : true,
         qqMemoryOn ? maskPath(activeMemoryPaths().qqForBili) : '未开启（正常）');
@@ -2880,6 +2892,18 @@ if ($d.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { ${writeOut('$
 
   async function handleBili(req, res, url) {
     const pathname = url.pathname;
+    // 本机补丁（2026-11-01）：QQ 手动 B站 工具的总开关 / 审计（转发桥接）。
+    if (req.method === 'GET' && pathname.endsWith('/manual/state')) {
+      const result = await callBridge('/api/bili/manual/state', { timeoutMs: 8000 });
+      json(res, result.ok ? 200 : 502, result.data ?? { ok: false, error: result.error });
+      return;
+    }
+    if (req.method === 'POST' && pathname.endsWith('/manual/config')) {
+      const body = JSON.parse(await readBody(req) || '{}');
+      const result = await callBridge('/api/bili/manual/config', { method: 'POST', body, timeoutMs: 8000 });
+      json(res, result.ok ? 200 : 502, result.data ?? { ok: false, error: result.error });
+      return;
+    }
     if (req.method === 'GET' && pathname.endsWith('/fish-guard')) {
       const dir = activePlatformStateDir(BILI_DIR);
       const stateFile = path.join(dir, 'fish-guard.json');
