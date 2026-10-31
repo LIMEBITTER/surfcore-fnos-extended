@@ -1353,9 +1353,15 @@ export function createUpdatesService({ stateDir, components, blockedReason = () 
       pluginLog(`[updates] 下载完成：${(downloaded.bytes / 1024 / 1024).toFixed(2)} MB，${(downloaded.elapsedMs / 1000).toFixed(1)} 秒（${downloaded.url}）`);
       try {
         await new Promise((resolve, reject) => {
-          execFile('powershell', ['-NoProfile', '-Command',
-            `Expand-Archive -LiteralPath '${zipFile}' -DestinationPath '${stagingRoot}' -Force`],
-          { windowsHide: true, timeout: 120_000 }, (error) => (error ? reject(error) : resolve()));
+          if (process.platform === 'win32') {
+            execFile('powershell', ['-NoProfile', '-Command',
+              `Expand-Archive -LiteralPath '${zipFile}' -DestinationPath '${stagingRoot}' -Force`],
+            { windowsHide: true, timeout: 120_000 }, (error) => (error ? reject(error) : resolve()));
+          } else {
+            // Linux/macOS 用 unzip；-o 覆盖，-q 静音。缺 unzip 时报错由上层转成 verify.unzip-failed。
+            execFile('unzip', ['-o', '-q', zipFile, '-d', stagingRoot],
+              { timeout: 120_000 }, (error) => (error ? reject(error) : resolve()));
+          }
         });
       } catch (error) {
         return fail({

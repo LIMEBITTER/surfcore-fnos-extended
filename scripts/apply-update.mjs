@@ -79,6 +79,28 @@ function copyZip(staging, target) {
   // /MIR 会删掉"源里没有"的文件，连用户自建文件一起删；现在宁可留旧文件也不误删。
   const exDirs = ['state', 'backups', 'node_modules', '.git', 'logs', 'staging', 'pet', 'characters', 'voice-packs', 'tmp-update*'];
   const exFiles = ['config.json', 'bili.config.json', 'updates-pending.json'];
+  if (process.platform !== 'win32') {
+    // Linux/macOS 没有 robocopy：用 Node 递归复制，保持与 /E 相同的语义（只覆盖、不删除）。
+    try {
+      const skippedDir = (name) => exDirs.some((rule) => (rule.endsWith('*') ? name.startsWith(rule.slice(0, -1)) : name === rule));
+      const walk = (from, to) => {
+        fs.mkdirSync(to, { recursive: true });
+        for (const entry of fs.readdirSync(from, { withFileTypes: true })) {
+          if (entry.isDirectory()) {
+            if (skippedDir(entry.name)) continue;
+            walk(path.join(from, entry.name), path.join(to, entry.name));
+          } else if (entry.isFile()) {
+            if (exFiles.includes(entry.name)) continue;
+            fs.copyFileSync(path.join(from, entry.name), path.join(to, entry.name));
+          }
+        }
+      };
+      walk(staging, target);
+      return { ok: true };
+    } catch (error) {
+      return { ok: false, error: `复制更新包失败：${String(error?.message ?? error).slice(-500)}` };
+    }
+  }
   const argv = [
     staging, target,
     '/E',
