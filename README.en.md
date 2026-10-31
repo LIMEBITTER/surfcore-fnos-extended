@@ -1,5 +1,9 @@
 # SurfCore — QQ ↔ DeepSeek Harness Bridge + QQ × Bilibili plugin
 
+> 🍴 **This repository is [LIMEBITTER/surfcore-linux](https://github.com/LIMEBITTER/surfcore-linux) — a personal fork of [Mieksido/surfcore](https://github.com/Mieksido/surfcore).**
+> Upstream is read-only here: commits, branches and pull requests stay inside this fork — nothing is pushed, proposed or merged back upstream.
+> Fork-only differences, the `feat/qq-bili-tools` branch and the upstream-sync recipe are documented in [十一、Fork 说明](README.md#十一fork-说明).
+
 > ℹ️ This English page is a **condensed overview**. The full, code-level documentation
 > (architecture, every module, voice / pet / Bilibili subsystems, configuration and state files,
 > capability boundaries) is written in Chinese under [`docs/guides/`](docs/guides/) —
