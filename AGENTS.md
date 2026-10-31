@@ -99,6 +99,17 @@
 **不要**在没有 `--verify-ref` 通过、没有真实归档核对的情况下宣布"已发布"。
 版本号只由用户在发布会话里定；编辑会话不得 bump/tag/推公开仓库（见 §1.5）。
 
+## 1.9 Fork 边界（2026-11-01 用户要求，刚性）
+
+本仓库是 **[LIMEBITTER/surfcore-linux](https://github.com/LIMEBITTER/surfcore-linux)**，
+上游是 **[Mieksido/surfcore](https://github.com/Mieksido/surfcore)**。上游只读。
+
+1. **只往 fork 写**：`git push` 只允许 `origin`（`LIMEBITTER/surfcore-linux`）。
+2. **不碰上游**：不向上游推分支、不提 PR、不合并回上游；`upstream` 远端只允许 `fetch` 与 `git log`。
+3. **提交信息要能当 changelog**：`type(scope): 一句话结果` + 空行 + 分条写「现象 / 修法 / 验证」；
+   禁止 `update`、`fix`、`wip`、`调整` 这类空话（§1 第 9 条的具体化）。
+4. **不改写 main 历史**：不 `push --force`、不 rebase 已推送的 `main`；要撤改动走 `git revert`。
+
 ## 2. 环境事实（省得重新摸一遍）
 
 - 本机 DSH：`<DSH 安装目录>`，版本 `0.2.1-rc.2`；用户数据 `~/.dsh`。
