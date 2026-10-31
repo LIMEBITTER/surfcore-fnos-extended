@@ -1672,11 +1672,12 @@ ${body}`;
         const v = readUnified().config?.socialV2?.voice?.tts ?? {};
         for (const item of VOICE_PORTS) {
           const open = await portOpen(item.port, 800);
-          const hint = item.key === 'voxd'
-            ? '启动语音包：voice-packs\voice-local\run.bat'
-            : item.key === 'gsv'
-              ? '本地音色还需要 GPT-SoVITS：voice-local\gsv.bat，等约 40 秒'
-              : '云端包：voice-cloud\run.bat，并在设置→语音里启用';
+          const linux = process.platform !== 'win32';
+        const hint = item.key === 'voxd'
+          ? (linux ? 'Linux 语音包需手动启动：在 voice-packs/voice-local 里用 python -m voxd --config config.toml（见 docs/VOICE-PACKS.md）' : '启动语音包：voice-packs\voice-local\run.bat')
+          : item.key === 'gsv'
+            ? (linux ? '本地音色还需要 GPT-SoVITS（Linux 下需自己跑 gsv 服务）' : '本地音色还需要 GPT-SoVITS：voice-local\gsv.bat，等约 40 秒')
+            : (linux ? '云端包需手动启动：voice-packs/voice-cloud 里 python -m voxd --config config.toml' : '云端包：voice-cloud\run.bat，并在设置→语音里启用');
           const optional = item.key !== 'voxd';
           install.push({
             name: item.label, level: open ? 'ok' : (optional ? 'warn' : 'fail'), ok: open,
@@ -1886,9 +1887,20 @@ ${body}`;
     if (process.env.SURFCORE_SKIP_AUTOSTART === '1') return false;
     if (!/^http:\/\/127\.0\.0\.1:\d{2,5}$/.test(String(url))) return false;
     try {
-      spawn(process.env.ComSpec || 'cmd.exe', ['/d', '/c', 'start', '""', `"${url}"`], {
-        detached: true, stdio: 'ignore', windowsHide: true, windowsVerbatimArguments: true,
-      }).unref();
+      if (process.platform === 'win32') {
+        const child = spawn(process.env.ComSpec || 'cmd.exe', ['/d', '/c', 'start', '""', `"${url}"`], {
+          detached: true, stdio: 'ignore', windowsHide: true, windowsVerbatimArguments: true,
+        });
+        child.on('error', () => {});
+        child.unref();
+        return true;
+      }
+      // Linux / macOS：没有桌面会话时 xdg-open/open 会失败，所以只尝试、不承诺打开成功；
+      // 一定挂 error 监听，否则 ENOENT 会变成未捕获异常把 DSH 进程带崩。
+      const opener = process.platform === 'darwin' ? 'open' : 'xdg-open';
+      const child = spawn(opener, [String(url)], { detached: true, stdio: 'ignore' });
+      child.on('error', () => {});
+      child.unref();
       return true;
     } catch {
       return false;
@@ -1941,6 +1953,14 @@ ${body}`;
       };
     }
 
+    if (process.platform !== 'win32') {
+      return {
+        ok: false,
+        code: 'PLATFORM_UNSUPPORTED',
+        error: '当前系统不支持直接启动 SnowLuma（Windows 才用 launcher.bat / SnowLuma.exe）',
+        hint: 'Linux 请用 Docker：cd ~/snowluma && docker compose up -d（WebUI 默认 http://127.0.0.1:5099）',
+      };
+    }
     const launcher = resolveSnowLumaLauncher();
     if (!launcher) {
       return { ok: false, error: '找不到 SnowLuma 启动脚本：请在设置里填「SnowLuma 安装目录」或「启动脚本」' };

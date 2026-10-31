@@ -750,11 +750,19 @@ async function install(id, { force = false, mirror = '', jobs = 0 } = {}) {
         });
         await flattenSingleDir(dir);
         // GitHub archive 解压出来可能带只读属性，后面复制 config / 拉模型会写不进去。
+        // attrib 是 Windows 命令；Linux 用 chmod 去只读位（尽量做，失败不影响安装）。
         try {
-          await new Promise((resolve) => {
-            const c = spawn('cmd', ['/c', `attrib -R "${dir}\*" /S /D`], { windowsHide: true, stdio: 'ignore' });
-            c.on('exit', resolve); c.on('error', resolve);
-          });
+          if (process.platform === 'win32') {
+            await new Promise((resolve) => {
+              const c = spawn('cmd', ['/c', `attrib -R "${dir}\*" /S /D`], { windowsHide: true, stdio: 'ignore' });
+              c.on('exit', resolve); c.on('error', resolve);
+            });
+          } else {
+            await new Promise((resolve) => {
+              const c = spawn('chmod', ['-R', 'u+rwX', dir], { stdio: 'ignore' });
+              c.on('exit', resolve); c.on('error', resolve);
+            });
+          }
         } catch {}
         // 仓库里只有 config.example.toml（真实配置不入库）：装完先复制成 config.toml，
         // 否则 voxd 起不来、用户看到"包里没有 config.toml"。
@@ -893,6 +901,15 @@ async function install(id, { force = false, mirror = '', jobs = 0 } = {}) {
     if (process.platform === 'win32' && !(await exists(path.join(dir, '.venv', 'Scripts', 'python.exe')))) {
       throw new Error('Python 环境还没装好：先点「卸载」再点「安装」重新装一次（会自动创建 .venv 并装依赖）');
     }
+    // 走到这里才真正要跑 Windows 批处理：非 Windows 直接结构化拒绝（构造参数已经检查完）。
+    if (process.platform !== 'win32') {
+      return {
+        ok: false,
+        code: 'PLATFORM_UNSUPPORTED',
+        error: '语音包的启动/停止脚本是 Windows 批处理，Linux 不能直接执行',
+        hint: 'Linux 用手动方式：cd state/voice-packs/<id> && python -m voxd --config config.toml；停止用 kill 或 systemd',
+      };
+    }
     if (await probePort(m.port)) return { ok: true, already: true, port: m.port };
 
     // 本地音色：先把 GPT-SoVITS(9880) 拉起来，否则入口起来了也只能 503。
@@ -995,6 +1012,14 @@ async function install(id, { force = false, mirror = '', jobs = 0 } = {}) {
   }
 
   async function stop(id) {
+    if (process.platform !== 'win32') {
+      return {
+        ok: false,
+        code: 'PLATFORM_UNSUPPORTED',
+        error: '语音包的启动/停止脚本是 Windows 批处理，Linux 不能直接执行',
+        hint: 'Linux 用手动方式：cd state/voice-packs/<id> && python -m voxd --config config.toml；停止用 kill 或 systemd',
+      };
+    }
     const m = manifests(cfg).find((x) => x.id === id);
     if (!m) throw new Error(`未知语音包：${id}`);
     const dir = packDir(cfg, id);
