@@ -119,7 +119,8 @@
 5. **仓库内合并**：开 PR 时 base 必须是 `LIMEBITTER/surfcore-linux`（脱钩后已没有通往上游的
    compare 入口）；更稳妥的是本地 `git merge` 后 `git push origin main`，全程不产生任何上游事件。
 6. **已脱离 fork 网络（2026-11-01）**：本仓库是独立仓库，上游的 Forks 列表、Network 图里都不再出现；
-   随之失去网页 Sync fork 按钮，同步上游只用 `git fetch upstream`（README §11.3）。
+   随之失去网页 Sync fork 按钮，同步上游用 `npm run sync:upstream`
+   （`scripts/sync-upstream.mjs`：fetch → merge → push origin；只读上游，见 README §11.3）。
 
 ## 2. 环境事实（省得重新摸一遍）
 
