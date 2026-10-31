@@ -1149,8 +1149,9 @@ ${body}`;
     const layerPaths = () => {
       const layers = activePersonaLayers();
       return layers ? {
-        core: resolvePersonaFile(),
+        core: layers.core || resolvePersonaFile(),
         daily: layers.daily,
+        tone: layers.tone,
         scenes: layers.scenes,
         scenesDir: layers.scenesDir,
       } : { core: resolvePersonaFile(), daily: '', tone: '', scenes: {}, scenesDir: '' };
@@ -1173,6 +1174,7 @@ ${body}`;
         mtime: mtimeIso(paths.core),
         layers: {
           core: { path: paths.core, text: core, chars: core.length },
+          tone: { path: paths.tone, text: readTextFile(paths.tone), chars: readTextFile(paths.tone).length },
           daily: { path: paths.daily, text: daily, chars: daily.length },
           scenes,
         },
@@ -1212,7 +1214,10 @@ ${body}`;
     const paths = layerPaths();
     let target = paths.core;
     let label = 'persona';
-    if (layer === 'daily') {
+    if (layer === 'tone') {
+      target = paths.tone;
+      label = 'persona-tone';
+    } else if (layer === 'daily') {
       target = paths.daily;
       label = 'persona-daily';
     } else if (layer === 'scene') {

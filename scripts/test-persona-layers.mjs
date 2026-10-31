@@ -115,4 +115,14 @@ assert.ok(pet.includes('identity: buildPersonaIdentity('), '桌宠 提示词必�
 assert.ok(scheduler.includes("tone: readPersonaLayerText('tone')"), 'B站 提示词必须带语气层');
 assert.ok(pet.includes("tone: readPersonaLayerText('tone')"), '桌宠 提示词必须带语气层');
 
+// 回归（2026-10-31）：保存全部不能把语气层写进人格核心。
+{
+  const index = fs.readFileSync(path.resolve('plugins/surfcore/lib/index.js'), 'utf8');
+  assert.ok(index.includes("layer === 'tone'"), '服务端必须有 tone 保存分支（否则落到 core）');
+  assert.ok(index.includes('tone: layers.tone'), '层路径必须包含 tone');
+  assert.ok(index.includes('tone: { path: paths.tone'), 'GET /persona 必须返回 tone 文本');
+  const client = fs.readFileSync(path.resolve('plugins/surfcore/lib/client.js'), 'utf8');
+  assert.ok(client.includes('origTone'), '客户端保存前要知道原层有没有内容，不能盲写空层');
+}
+
 console.log('✅ 人格卡分层通过');

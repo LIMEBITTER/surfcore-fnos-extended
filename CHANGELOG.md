@@ -4,6 +4,15 @@
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 发布规则见 [docs/guides/VERSIONS.md](docs/guides/VERSIONS.md)。
 
+## [0.8.4] - 2026-11-01
+
+### 修复（点「保存全部」人格核心被清空/覆盖）
+
+- 服务端 `handlePersona`：层路径补 `tone`；POST 增加 `layer === 'tone'` → 写 `persona.tone.md`
+  （以前没有分支，落到默认 `core`，会把空语气/拆分语气写进人格核心）；GET `layers` 返回 tone 文本；
+- 客户端「保存全部」不再盲写空层：核心必写，语气/日常/场景只在“有内容”或“原本有内容被清空”时提交。
+
+
 ## [0.8.3] - 2026-10-31
 
 ### 修复（SnowLuma 没启动就弹“断线”L2）

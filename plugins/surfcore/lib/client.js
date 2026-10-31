@@ -3676,12 +3676,16 @@ F("socialV2.voice.ffmpegPath", "ffmpeg 路径", "留空走 PATH", "text", { wide
         setBusy("persona-save");
         setErr("");
         const failures = [];
-        const jobs = [
-          ["core", "core", draft.core],
-          ["tone", "tone", draft.tone],
-          ["daily", "daily", draft.daily],
-          ["scene", "scene", sceneText],
-        ];
+        // 只写「有内容」或「原本有内容、被用户清空」的层：
+        // 以前 tone 永远为空也会发，服务端又没 tone 分支 → 被写进 persona.md，
+        // 点一次「保存全部」就把人格核心覆盖掉（2026-10-31 用户反馈）。
+        const origTone = data?.layers?.tone?.text ?? "";
+        const origDaily = data?.layers?.daily?.text ?? "";
+        const origScene = data?.layers?.scenes?.[scene]?.text ?? "";
+        const jobs = [["core", "core", draft.core]];
+        if (String(draft.tone || "").trim() || String(origTone).trim()) jobs.push(["tone", "tone", draft.tone]);
+        if (String(draft.daily || "").trim() || String(origDaily).trim()) jobs.push(["daily", "daily", draft.daily]);
+        if (String(sceneText || "").trim() || String(origScene).trim()) jobs.push(["scene", "scene", sceneText]);
         for (const [layer, label, text] of jobs) {
           try {
             await api("/persona", { method: "POST", body: { layer, scene: layer === "scene" ? scene : "", text } });
