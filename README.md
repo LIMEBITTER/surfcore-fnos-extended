@@ -396,6 +396,8 @@ node scripts/setup-dsh.mjs      # 重装 preset + MCP
 
 > 老版本（≤0.6.18）无法自动更新：用 [强制更新提示词.txt](dist/强制更新提示词.txt)（复制给 DSH）或 [在线版说明](docs/guides/FORCE_UPDATE_PROMPT.md)。
 
+> 本仓库包含本机补丁：QQ 手动 B站 工具（`qq_bili_*`）。见 [docs/guides/QQ-BILI-TOOLS.md](docs/guides/QQ-BILI-TOOLS.md)。
+
 ---
 
 ## 十一、Fork 说明

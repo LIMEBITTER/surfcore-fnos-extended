@@ -59,6 +59,28 @@ function getOneBotConfig() {
   };
 }
 
+
+// ── 本机补丁（2026-11-01）：B站 手动工具 ──────────────────────────────────
+// 只允许主人私聊：桥接侧会再次校验 key === private:<ownerQQ>。
+function ownerPrivateKey() {
+  try {
+    const c = getConfig();
+    const qq = String(c.ownerQQ ?? c.admin?.qq ?? '').trim();
+    return qq ? `private:${qq}` : '';
+  } catch {
+    return '';
+  }
+}
+
+async function biliTool(pathname, payload) {
+  const data = await agentApi(`/api/bili/tool/${pathname}`, {
+    method: 'POST',
+    body: JSON.stringify({ key: ownerPrivateKey(), ...payload }),
+    timeoutMs: 120000
+  });
+  return data;
+}
+
 // 与 bridge.allowed 保持一致：allow 列表为空时按 allowAllWhenEmpty 放行
 function isAllowed(allowList, denyList, id, allowAllWhenEmpty) {
   const s = String(id);
@@ -549,6 +571,87 @@ server.tool(
       return { content: [{ type: 'text', text: serializeModelData(data) }] };
     } catch (error) {
       return { content: [{ type: 'text', text: `发送失败：${error?.message ?? error}` }], isError: true };
+    }
+  }
+);
+
+// ── B站 手动工具（本机补丁 2026-11-01）──────────────────────────────────
+// 读工具：搜索 / 视频详情 / 选题；轻写：点赞（可逆）；重写：只能“预览”，发布由主人回确认码触发。
+server.tool(
+  'qq_bili_search',
+  '搜索 B站视频（只读，仅主人私聊可用）。返回标题、UP、播放、发布时间和链接。',
+  { query: z.string().describe('搜索关键词'), page: z.number().int().min(1).max(5).optional().describe('页码，默认 1') },
+  async ({ query, page }) => {
+    try {
+      const data = await biliTool('search', { query, page: page ?? 1 });
+      return { content: [{ type: 'text', text: String(data.output ?? '（没有结果）') }] };
+    } catch (error) {
+      return { content: [{ type: 'text', text: `B站搜索失败：${error?.message ?? error}` }], isError: true };
+    }
+  }
+);
+
+server.tool(
+  'qq_bili_video',
+  '查看一条 B站视频的详情（只读，仅主人私聊可用）：标题、UP、发布时间、简介、统计。',
+  { bvid: z.string().describe('BV 号，例如 BV1xx411c7mD') },
+  async ({ bvid }) => {
+    try {
+      const data = await biliTool('video', { bvid });
+      return { content: [{ type: 'text', text: String(data.output ?? '（没有内容）') }] };
+    } catch (error) {
+      return { content: [{ type: 'text', text: `看视频失败：${error?.message ?? error}` }], isError: true };
+    }
+  }
+);
+
+server.tool(
+  'qq_bili_feed',
+  '按她的偏好挑几条 B站候选视频（只读，仅主人私聊可用；会排除看过的和最近推过的）。',
+  { n: z.number().int().min(1).max(10).optional().describe('要几条，默认 6') },
+  async ({ n }) => {
+    try {
+      const data = await biliTool('feed', { n: n ?? 6 });
+      return { content: [{ type: 'text', text: String(data.output ?? '（没有候选）') }] };
+    } catch (error) {
+      return { content: [{ type: 'text', text: `选题失败：${error?.message ?? error}` }], isError: true };
+    }
+  }
+);
+
+server.tool(
+  'qq_bili_like',
+  '给 B站视频点赞（仅主人私聊可用；直接执行并回执）。取消赞请让主人自己在 B站 网页操作。',
+  {
+    bvid: z.string().describe('BV 号')
+  },
+  async ({ bvid }) => {
+    try {
+      const data = await biliTool('like', { bvid });
+      return { content: [{ type: 'text', text: String(data.output ?? '（已执行）') }] };
+    } catch (error) {
+      return { content: [{ type: 'text', text: `点赞失败：${error?.message ?? error}` }], isError: true };
+    }
+  }
+);
+
+server.tool(
+  'qq_bili_post',
+  '在主人的 B站 账号上直接发动态或视频评论（仅主人私聊可用）。默认直接发布；把 dryRun 设为 true 时只生成预览、不发布。发布后会走 SurfCore 的额度闸和出站身份闸，正文里不能出现 QQ 号/账号标识。',
+  {
+    kind: z.enum(['dynamic', 'comment']).describe('dynamic = 发动态；comment = 在视频下发评论/回复'),
+    text: z.string().describe('正文（最多 300 字）'),
+    bvid: z.string().optional().describe('评论必填：视频 BV 号'),
+    root: z.string().optional().describe('回复二级评论时：线程根评论 rpid'),
+    parent: z.string().optional().describe('回复二级评论时：要回复的那条 rpid'),
+    dryRun: z.boolean().optional().describe('true = 只预览不发布；默认直接发布')
+  },
+  async ({ kind, text, bvid, root, parent, dryRun }) => {
+    try {
+      const data = await biliTool('post', { kind, text, bvid, root, parent, dryRun: dryRun === true });
+      return { content: [{ type: 'text', text: String(data.output ?? '（已执行）') }] };
+    } catch (error) {
+      return { content: [{ type: 'text', text: `B站发布失败：${error?.message ?? error}` }], isError: true };
     }
   }
 );

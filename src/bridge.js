@@ -10,7 +10,7 @@ import os from 'node:os';
 import http from 'node:http';
 import path from 'node:path';
 import crypto from 'node:crypto';
-import { execFileSync } from 'node:child_process';
+import { execFile, execFileSync } from 'node:child_process';
 import yaml from 'js-yaml';
 import { extractPresetPrefix, presetPromptBlockers, presetPromptWarnings, renderPresetPromptYaml } from './preset-prompt.js';
 import { GEN1_ROLE_LINE_RE, parseRoleSections, roleCharStats, roleSectionReport, selectRoleText } from './role-card.js';
@@ -4110,6 +4110,60 @@ async function main() {
     return cfg.socialV2?.tools?.[flag] !== false;
   }
 
+  // ── 本机补丁（2026-11-01）：B站 手动工具（搜索 / 视频 / 选题 / 点赞 / 预览发布）──
+  // 设计：模型永远拿不到“直接发布”的接口，只能生成预览；主人在 QQ 回 /发 <码> 后，
+  // 由桥接在这里执行 bili.mjs，复用原有的限额闸、出站身份闸和记账。
+  const BILI_CLI = path.join(ROOT, 'plugins', 'surfcore', 'tools', 'bili.mjs');
+  const BILI_MANUAL_MAX_TEXT = 300;
+  const biliManualRate = { day: '', posts: 0, likes: 0 };
+  function biliManualOwnerQQ() {
+    return String(cfg.ownerQQ ?? cfg.admin?.qq ?? '').trim();
+  }
+  function biliManualOwnerKey() {
+    const qq = biliManualOwnerQQ();
+    return qq ? `private:${qq}` : '';
+  }
+  function biliManualRateOk(kind) {
+    const day = new Date().toISOString().slice(0, 10);
+    if (biliManualRate.day !== day) { biliManualRate.day = day; biliManualRate.posts = 0; biliManualRate.likes = 0; }
+    if (kind === 'post') { if (biliManualRate.posts >= 10) return '今天手动发布已到上限（10 次）'; biliManualRate.posts += 1; }
+    if (kind === 'like') { if (biliManualRate.likes >= 50) return '今天手动点赞已到上限（50 次）'; biliManualRate.likes += 1; }
+    return '';
+  }
+  function runBiliCli(args, timeoutMs = 60000) {
+    return new Promise((resolve) => {
+      execFile(process.execPath, [BILI_CLI, ...args], { timeout: timeoutMs, maxBuffer: 8 * 1024 * 1024, windowsHide: true }, (error, stdout, stderr) => {
+        resolve({ ok: !error, stdout: String(stdout ?? ''), stderr: String(stderr ?? ''), timedOut: Boolean(error?.killed) });
+      });
+    });
+  }
+  function biliManualEnabled() {
+    try {
+      const current = readJsonSafe(path.join(ROOT, 'config.json'), {});
+      return current?.biliBridge?.manual?.enabled === true;
+    } catch { return false; }
+  }
+  function saveBiliManualConfig(patch) {
+    const file = path.join(ROOT, 'config.json');
+    const current = readJsonSafe(file, {});
+    const next = {
+      ...current,
+      biliBridge: { ...(current.biliBridge ?? {}), manual: { ...(current.biliBridge?.manual ?? {}), ...patch } }
+    };
+    const tmp = `${file}.tmp`;
+    fs.writeFileSync(tmp, JSON.stringify(next, null, 2) + '\n');
+    fs.renameSync(tmp, file);
+    if (cfg.biliBridge) cfg.biliBridge = next.biliBridge;
+    else cfg.biliBridge = next.biliBridge;
+    return next.biliBridge.manual;
+  }
+  function biliManualAudit(entry) {
+    try { fs.appendFileSync(path.join(STATE_DIR, 'bili-manual-log.jsonl'), JSON.stringify({ at: new Date().toISOString(), ...entry }) + '\n'); } catch {}
+  }
+  function biliManualTextHash(text) {
+    return crypto.createHash('sha256').update(String(text)).digest('hex').slice(0, 16);
+  }
+
   function startConsoleServer() {
     const port = cfg.consolePort ?? 3100;
     // 控制台鉴权：优先用 config.consoleToken，未配置则自动生成并持久化，不再默认无鉴权。
@@ -4320,7 +4374,8 @@ async function main() {
         if (!hasToken) {
           const tokenlessAgentAllowed = url.pathname === '/api/status'
             || url.pathname.startsWith('/api/send/')
-            || url.pathname.startsWith('/api/images/');
+            || url.pathname.startsWith('/api/images/')
+            || url.pathname.startsWith('/api/bili/tool/');
           if (!tokenlessAgentAllowed) {
             sendJson({ ok: false, error: '未授权：该接口的智能体调用必须携带有效的会话令牌' }, 403);
             return;
@@ -4544,6 +4599,103 @@ async function main() {
           if (!biliShare) { sendJson({ ok: false, error: '分享调度未启用（检查 biliBridge.share / 白名单群）' }, 400); return; }
           const result = await biliShare.fireNow();
           sendJson({ ok: result?.ok !== false, result });
+          return;
+        }
+        // ── 本机补丁（2026-11-01）：B站 手动工具的总开关与审计（设置页用）──────────
+        if (req.method === 'GET' && url.pathname === '/api/bili/manual/state') {
+          let audit = [];
+          try {
+            const raw = fs.readFileSync(path.join(STATE_DIR, 'bili-manual-log.jsonl'), 'utf8').trim();
+            audit = raw.split('\n').slice(-30).filter(Boolean)
+              .map((line) => { try { return JSON.parse(line); } catch { return null; } })
+              .filter(Boolean).reverse();
+          } catch {}
+          sendJson({ ok: true, enabled: biliManualEnabled(), audit });
+          return;
+        }
+        if (req.method === 'POST' && url.pathname === '/api/bili/manual/config') {
+          const body = await readBody();
+          const manual = saveBiliManualConfig({ enabled: body.enabled === true });
+          sendJson({ ok: true, enabled: manual.enabled === true });
+          return;
+        }
+
+        // ── 本机补丁（2026-11-01）：B站 手动工具端点（只允许主人私聊）──────────────
+        if (req.method === 'POST' && url.pathname.startsWith('/api/bili/tool/')) {
+          const body = await readBody();
+          const key = String(body.key ?? '').trim();
+          if (!biliManualOwnerKey() || key !== biliManualOwnerKey()) {
+            sendJson({ ok: false, error: '只允许主人私聊使用 B站 工具' }, 403);
+            return;
+          }
+          if (!biliManualEnabled()) {
+            sendJson({ ok: false, error: 'B站 手动工具未启用：设置 → SurfCore → B站 → QQ 手动工具' }, 403);
+            return;
+          }
+          const action = url.pathname.slice('/api/bili/tool/'.length);
+          const trim = (value, n = 6000) => String(value ?? '').slice(0, n);
+          if (action === 'search') {
+            const query = String(body.query ?? '').trim().slice(0, 60);
+            if (!query) { sendJson({ ok: false, error: 'query 不能为空' }, 400); return; }
+            const r = await runBiliCli(['search', query, String(Number(body.page) || 1)], 45000);
+            sendJson({ ok: r.ok, output: trim(r.stdout), error: r.ok ? '' : trim(`${r.stderr}${r.stdout}`, 1500) }, r.ok ? 200 : 400);
+            return;
+          }
+          if (action === 'video') {
+            const bvid = String(body.bvid ?? '').trim();
+            if (!/^BV[0-9A-Za-z]{8,12}$/.test(bvid)) { sendJson({ ok: false, error: 'bvid 格式不对' }, 400); return; }
+            const r = await runBiliCli(['video', bvid], 90000);
+            // video-content.mjs 可能在尾部抽帧失败时以非 0 退出，但正文（元信息/字幕）已经拿到；
+            // 以输出内容为准，避免把“看视频”误报成失败。
+            const ok = r.ok || r.stdout.includes('=== 元信息 ===');
+            sendJson({ ok, output: trim(r.stdout, 8000), error: ok ? '' : trim(`${r.stderr}${r.stdout}`, 1500) }, ok ? 200 : 400);
+            return;
+          }
+          if (action === 'feed') {
+            const n = Math.min(10, Math.max(1, Number(body.n) || 6));
+            const r = await runBiliCli(['feed', '--n', String(n)], 60000);
+            sendJson({ ok: r.ok, output: trim(r.stdout), error: r.ok ? '' : trim(`${r.stderr}${r.stdout}`, 1500) }, r.ok ? 200 : 400);
+            return;
+          }
+          if (action === 'like') {
+            const bvid = String(body.bvid ?? '').trim();
+            if (!/^BV[0-9A-Za-z]{8,12}$/.test(bvid)) { sendJson({ ok: false, error: 'bvid 格式不对' }, 400); return; }
+            const limit = biliManualRateOk('like');
+            if (limit) { sendJson({ ok: false, error: limit }, 429); return; }
+            // 实测 B站 archive/like 的取消赞（like=0）稳定返回 -400，当前只提供“点赞”；
+            // 取消赞留给 B站 网页端。工具面不暴露 undo，避免给模型一个必然失败的选项。
+            const r = await runBiliCli(['like', '--bvid', bvid, '--go'], 45000);
+            biliManualAudit({ action: 'like', ok: r.ok, bvid });
+            sendJson({ ok: r.ok, output: trim(r.stdout, 1200), error: r.ok ? '' : trim(`${r.stderr}${r.stdout}`, 1500) }, r.ok ? 200 : 400);
+            return;
+          }
+          if (action === 'post') {
+            const kind = String(body.kind ?? '').trim();
+            const text = String(body.text ?? '').trim();
+            const dryRun = body.dryRun === true;
+            if (!text || text.length > BILI_MANUAL_MAX_TEXT) { sendJson({ ok: false, error: `正文不能为空，且不超过 ${BILI_MANUAL_MAX_TEXT} 字` }, 400); return; }
+            let args;
+            let bvid = '';
+            if (kind === 'dynamic') {
+              args = ['dynamic', 'post', '--text', text, dryRun ? '--dry' : '--go'];
+            } else if (kind === 'comment') {
+              bvid = String(body.bvid ?? '').trim();
+              if (!/^BV[0-9A-Za-z]{8,12}$/.test(bvid)) { sendJson({ ok: false, error: '评论需要合法的 bvid' }, 400); return; }
+              const root = String(body.root ?? '').trim();
+              const parent = String(body.parent ?? '').trim();
+              args = ['comment', '--bvid', bvid, '--message', text, ...(root ? ['--root', root] : []), ...(parent ? ['--parent', parent] : []), dryRun ? '--dry' : '--go'];
+            } else { sendJson({ ok: false, error: 'kind 只能是 dynamic / comment' }, 400); return; }
+            if (!dryRun) {
+              const limit = biliManualRateOk('post');
+              if (limit) { sendJson({ ok: false, error: limit }, 429); return; }
+            }
+            const r = await runBiliCli(args, 120000);
+            if (!dryRun) biliManualAudit({ action: kind, ok: r.ok, bvid, textHash: biliManualTextHash(text) });
+            const ok = r.ok || (kind === 'dynamic' && /已发布/.test(r.stdout)) || (kind === 'comment' && /code=0/.test(r.stdout));
+            sendJson({ ok, output: trim(r.stdout, 4000), error: ok ? '' : trim(`${r.stderr}\n${r.stdout}`, 1500) }, ok ? 200 : 400);
+            return;
+          }
+          sendJson({ ok: false, error: `未知 B站 工具：${action}` }, 404);
           return;
         }
         if (req.method === 'POST' && url.pathname === '/api/bili/dynamics/poll') {

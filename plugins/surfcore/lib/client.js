@@ -3495,7 +3495,22 @@ F("socialV2.voice.ffmpegPath", "ffmpeg 路径", "留空走 PATH", "text", { wide
       const [pending, setPending] = useState([]);
       const [pendingMsg, setPendingMsg] = useState("");
       const [automation, setAutomation] = useState(null);
+      const [manualState, setManualState] = useState(null);
       const bili = overview?.bili ?? {};
+
+      const loadManualState = useCallback(async () => {
+        try { setManualState(await api("/bili/manual/state")); }
+        catch (e) { setManualState({ ok: false, error: String(e?.message ?? e) }); }
+      }, []);
+      useEffect(() => { loadManualState(); }, [loadManualState]);
+      const toggleManual = async (enabled) => {
+        setBusy("manual");
+        try {
+          await api("/bili/manual/config", { method: "POST", body: { enabled } });
+          toast(enabled ? "✓ 已允许 QQ 私聊直接操作 B站" : "已关闭：QQ 里的 B站 工具会被拒绝");
+          await loadManualState();
+        } catch (e) { toast(`✗ ${e.message}`); } finally { setBusy(""); }
+      };
 
       const loadAutomation = useCallback(async () => {
         try { setAutomation(await api("/bili/automation")); }
@@ -3529,6 +3544,28 @@ F("socialV2.voice.ffmpegPath", "ffmpeg 路径", "留空走 PATH", "text", { wide
             chk.ok === false ? h("div", { className: "qbw-err", style: { marginTop: "4px" } },
               `✗ ${chk.error || "核查失败"}${chk.hint ? `（建议：${chk.hint}）` : ""}`) : null);
         }));
+
+      const manualCard = h("div", { className: "qbw-card" },
+        h("h4", null, "QQ 手动工具（B站）"),
+        h("div", { className: "qbw-hint" },
+          "允许 QQ 私聊里直接搜索/看视频/点赞/发动态/评论。工具：qq_bili_search、qq_bili_video、qq_bili_feed、qq_bili_like、qq_bili_post。发布仍走额度闸 + 出站身份闸；默认关闭。"),
+        h("label", { style: { display: "flex", alignItems: "center", gap: "8px", marginTop: "8px" } },
+          h("input", {
+            type: "checkbox",
+            checked: manualState?.enabled === true,
+            disabled: !!busy,
+            onChange: (e) => toggleManual(e.target.checked),
+          }),
+          h("span", null, "允许 QQ 直接操作 B站（写操作）")),
+        manualState?.error ? h("div", { className: "qbw-err", style: { marginTop: "6px" } }, `✗ ${manualState.error}`) : null,
+        h("div", { style: { marginTop: "10px", fontWeight: 600 } }, "最近手动操作"),
+        (manualState?.audit?.length ?? 0) === 0
+          ? h("div", { className: "qbw-hint" }, "还没有记录")
+          : h("div", { className: "qbw-list", style: { marginTop: "4px" } },
+            manualState.audit.slice(0, 10).map((x, i) => h("div", { key: i, className: "qbw-hint" },
+              `${String(x.at ?? "").slice(5, 16).replace("T", " ")} · ${x.action ?? "?"}${x.bvid ? ` · ${x.bvid}` : ""} · ${x.ok ? "✓" : "✗"}`))),
+        h("div", { className: "qbw-actions", style: { marginTop: "8px" } },
+          h(Btn, { kind: "qbw-btn2", onClick: loadManualState, disabled: !!busy }, "刷新记录")));
 
       const groups = query.trim()
         ? BILI_FIELDS.map((g) => ({ ...g, fields: g.fields.filter((f) => `${g.group} ${f.label} ${f.hint ?? ""} ${f.path.join(".")}`.toLowerCase().includes(query.trim().toLowerCase())) })).filter((g) => g.fields.length)
@@ -3612,6 +3649,7 @@ F("socialV2.voice.ffmpegPath", "ffmpeg 路径", "留空走 PATH", "text", { wide
                 h(Btn, { kind: "qbw-btn2", onClick: saveCookie, disabled: !!busy || !cookie.sessdata || !cookie.bili_jct }, "写入凭据"),
                 cookieMsg ? h("div", { className: cookieMsg.startsWith("✓") ? "qbw-ok" : "qbw-err" }, cookieMsg) : null)),
           accountCard,
+          manualCard,
             h("div", { className: "qbw-card" }, h("h4", null, "待审核"),
               h("p", null, "她回复别人之前，草稿先到这儿；你点「发」才发。"),
               pending.length === 0 ? h("p", null, "（队列是空的）") : pending.map((x) => h("div", { key: x.id, className: "qbw-item", style: { marginTop: "6px" } },
