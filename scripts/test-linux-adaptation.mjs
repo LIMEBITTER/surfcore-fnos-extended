@@ -17,10 +17,8 @@ assert.notEqual(fallback, '/nonexistent/surfcore-test-browser', '不存在的 SU
 // 3) 在非 Windows 上，PATH 清空且没有显式浏览器时，应给出可读的“找不到浏览器”错误
 if (process.platform !== 'win32') {
   const savedPath = process.env.PATH;
-  const savedEdge = process.env.SURFCORE_EDGE;
   process.env.PATH = '';
   process.env.SURFCORE_BROWSER = '';
-  process.env.SURFCORE_EDGE = '';
   try {
     assert.equal(findBrowser(), '', 'PATH 为空时应找不到浏览器');
     await assert.rejects(
@@ -30,8 +28,6 @@ if (process.platform !== 'win32') {
     );
   } finally {
     process.env.PATH = savedPath;
-    if (savedEdge === undefined) delete process.env.SURFCORE_EDGE;
-    else process.env.SURFCORE_EDGE = savedEdge;
   }
 }
 

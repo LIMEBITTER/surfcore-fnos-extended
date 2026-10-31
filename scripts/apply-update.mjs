@@ -74,49 +74,27 @@ async function waitExit(pid, timeoutMs = 60 * 60_000) {
 }
 
 function copyZip(staging, target) {
-  // robocopy 比 cpSync 可靠：能处理大量文件、失败会返回码。
-  // 2026-10-29：从 /MIR 改成 /E —— **只覆盖、不删除**。
-  // /MIR 会删掉"源里没有"的文件，连用户自建文件一起删；现在宁可留旧文件也不误删。
-  const exDirs = ['state', 'backups', 'node_modules', '.git', 'logs', 'staging', 'pet', 'characters', 'voice-packs', 'tmp-update*'];
-  const exFiles = ['config.json', 'bili.config.json', 'updates-pending.json'];
-  if (process.platform !== 'win32') {
-    // Linux/macOS 没有 robocopy：用 Node 递归复制，保持与 /E 相同的语义（只覆盖、不删除）。
-    try {
-      const skippedDir = (name) => exDirs.some((rule) => (rule.endsWith('*') ? name.startsWith(rule.slice(0, -1)) : name === rule));
-      const walk = (from, to) => {
-        fs.mkdirSync(to, { recursive: true });
-        for (const entry of fs.readdirSync(from, { withFileTypes: true })) {
-          if (entry.isDirectory()) {
-            if (skippedDir(entry.name)) continue;
-            walk(path.join(from, entry.name), path.join(to, entry.name));
-          } else if (entry.isFile()) {
-            if (exFiles.includes(entry.name)) continue;
-            fs.copyFileSync(path.join(from, entry.name), path.join(to, entry.name));
-          }
-        }
-      };
-      walk(staging, target);
-      return { ok: true };
-    } catch (error) {
-      return { ok: false, error: `复制更新包失败：${String(error?.message ?? error).slice(-500)}` };
-    }
-  }
-  const argv = [
-    staging, target,
-    '/E',
-    '/NFL', '/NDL', '/NJH', '/NJS', '/NP', '/R:2', '/W:1',
-    '/XD', ...exDirs,
-    '/XF', ...exFiles,
-  ];
+  // Linux-only：递归复制，保持 /E 语义（只覆盖、不删除），排除运行期/个人数据。
   try {
-    execFileSync('robocopy', argv, { windowsHide: true, stdio: 'pipe', timeout: 10 * 60_000 });
+    const exDirs = ['state', 'backups', 'node_modules', '.git', 'logs', 'staging', 'pet', 'characters', 'voice-packs', 'tmp-update*'];
+    const exFiles = ['config.json', 'bili.config.json', 'updates-pending.json'];
+    const skippedDir = (name) => exDirs.some((rule) => (rule.endsWith('*') ? name.startsWith(rule.slice(0, -1)) : name === rule));
+    const walk = (from, to) => {
+      fs.mkdirSync(to, { recursive: true });
+      for (const entry of fs.readdirSync(from, { withFileTypes: true })) {
+        if (entry.isDirectory()) {
+          if (skippedDir(entry.name)) continue;
+          walk(path.join(from, entry.name), path.join(to, entry.name));
+        } else if (entry.isFile()) {
+          if (exFiles.includes(entry.name)) continue;
+          fs.copyFileSync(path.join(from, entry.name), path.join(to, entry.name));
+        }
+      }
+    };
+    walk(staging, target);
     return { ok: true };
   } catch (error) {
-    // robocopy: 0/1 成功，>=8 失败
-    const code = Number(error?.status ?? -1);
-    if (code >= 0 && code < 8) return { ok: true, code };
-    const detail = `${error?.stdout || ''}${error?.stderr || ''}`.trim().slice(-500);
-    return { ok: false, error: `robocopy 失败（exit ${code}）：${detail}` };
+    return { ok: false, error: `复制更新包失败：${String(error?.message ?? error).slice(-500)}` };
   }
 }
 

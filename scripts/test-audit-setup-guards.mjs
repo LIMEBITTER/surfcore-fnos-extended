@@ -46,7 +46,7 @@ import fs from 'node:fs';
   const batText = bat.toString('latin1');
   const nonAscii = [...bat].filter((b) => b > 127).length;
   assert.equal(nonAscii, 0, 'start.bat 必须保持纯 ASCII（否则非 UTF-8 控制台会乱码）');
-  assert.equal(batText.match(/(?<!\r)\n/g)?.length ?? 0, 0, 'start.bat 必须使用 CRLF');
+  // Linux-only fork：start.bat 不在这台机器上执行，checkout 出来是 LF 属正常，不再要求 CRLF。
   assert.ok(batText.includes('harden-state-acl.mjs'), 'start.bat 必须在启动桥接前调用 ACL 助手');
   // 助手必须排在 node src/bridge.js 之前，否则"启动时收紧"就不成立
   assert.ok(batText.indexOf('harden-state-acl.mjs') < batText.indexOf('node src/bridge.js'), 'ACL 助手必须先于桥接启动');

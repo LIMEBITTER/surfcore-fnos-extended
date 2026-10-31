@@ -12,9 +12,9 @@
  *   · 不写日志、不回显 SESSDATA；`readOwnerAccount()` 只返回 mid/昵称/时间；
  *   · 校验扫码的 mid 是否等于配置里的 owner.mid；不一致就拒绝保存（防串号）。
  *
- * 浏览器：优先用环境变量 SURFCORE_BROWSER（旧名 SURFCORE_EDGE 仍兼容）指向的可执行文件；
- * 否则自动找 Edge / Chrome / Chromium（Windows 看 Program Files，Linux 扫 PATH，macOS 看 /Applications）。
- * 找不到时返回可读错误，并在提示里给出安装/设置方法。
+ * 本 fork 只支持 Linux：浏览器优先用 SURFCORE_BROWSER 指向的可执行文件，
+ * 否则扫 PATH 找 chromium / google-chrome / microsoft-edge（含 /snap/bin）。
+ * 找不到时返回可读错误，并在提示里给出 apt 安装方法。
  */
 import fs from 'node:fs';
 import net from 'node:net';
@@ -55,33 +55,19 @@ function which(command) {
 }
 
 /**
- * 找一个 Chromium 内核浏览器（Edge / Chrome / Chromium 都能驱动 CDP）。
+ * 找一个 Chromium 内核浏览器（Linux-only；Edge/Chrome/Chromium 都能驱动 CDP）。
  * @returns {string} 可执行文件绝对路径；找不到返回空字符串。
  */
 export function findBrowser() {
-  const explicit = [process.env.SURFCORE_BROWSER, process.env.SURFCORE_EDGE]
-    .map((value) => String(value ?? '').trim())
-    .find((value) => value && isExecutableFile(value));
-  if (explicit) return explicit;
+  const explicit = String(process.env.SURFCORE_BROWSER ?? '').trim();
+  if (explicit && isExecutableFile(explicit)) return explicit;
 
   const candidates = [];
-  if (process.platform === 'win32') {
-    for (const root of [process.env.PROGRAMFILES, process.env['PROGRAMFILES(X86)'], process.env.LOCALAPPDATA]) {
-      if (!root) continue;
-      candidates.push(path.join(root, 'Microsoft', 'Edge', 'Application', 'msedge.exe'));
-      candidates.push(path.join(root, 'Google', 'Chrome', 'Application', 'chrome.exe'));
-    }
-  } else if (process.platform === 'darwin') {
-    candidates.push('/Applications/Google Chrome.app/Contents/MacOS/Google Chrome');
-    candidates.push('/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge');
-    candidates.push('/Applications/Chromium.app/Contents/MacOS/Chromium');
-  } else {
-    for (const name of ['chromium', 'chromium-browser', 'google-chrome', 'google-chrome-stable', 'microsoft-edge', 'microsoft-edge-stable', 'brave-browser']) {
-      const hit = which(name);
-      if (hit) candidates.push(hit);
-    }
-    candidates.push('/snap/bin/chromium');
+  for (const name of ['chromium', 'chromium-browser', 'google-chrome', 'google-chrome-stable', 'microsoft-edge', 'microsoft-edge-stable', 'brave-browser']) {
+    const hit = which(name);
+    if (hit) candidates.push(hit);
   }
+  candidates.push('/snap/bin/chromium');
   return candidates.find((file) => isExecutableFile(file)) ?? '';
 }
 
@@ -164,21 +150,11 @@ class Cdp {
 
 function killBrowser(browser) {
   if (!browser?.pid) return;
-  try { browser.kill(); } catch {}
-  if (process.platform === 'win32') {
-    setTimeout(() => {
-      try {
-        spawn('taskkill', ['/pid', String(browser.pid), '/T', '/F'], { stdio: 'ignore', windowsHide: true })
-          .on('error', () => {});
-      } catch {}
-    }, 400).unref?.();
-  } else {
-    setTimeout(() => {
-      try { browser.kill('SIGKILL'); } catch {}
-    }, 1500).unref?.();
-  }
+  try { browser.kill('SIGTERM'); } catch {}
+  setTimeout(() => {
+    try { browser.kill('SIGKILL'); } catch {}
+  }, 1500).unref?.();
 }
-const killEdge = killBrowser;
 
 function removeDir(dir) {
   if (!dir) return;
@@ -419,9 +395,8 @@ export async function startQrLogin({ target = 'owner', expectedMid = '', expecte
   const browserPath = findBrowser();
   if (!browserPath) {
     throw new Error(
-      '找不到可用的 Chromium 内核浏览器（Edge / Chrome / Chromium 都可以）。'
-      + 'Windows 装 Edge；Linux 可装 chromium（Debian/Ubuntu: apt install chromium）；'
-      + '也可用环境变量 SURFCORE_BROWSER 指向浏览器可执行文件。'
+      '找不到 Chromium 内核浏览器。Linux 请先安装：sudo apt install chromium'
+      + '（或 google-chrome / microsoft-edge），也可用 SURFCORE_BROWSER 指向浏览器可执行文件。'
     );
   }
   const profileDir = fs.mkdtempSync(path.join(os.tmpdir(), 'surfcore-bili-qr-'));
