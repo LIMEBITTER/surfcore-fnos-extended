@@ -1,0 +1,94 @@
+name: Sync upstream
+
+# 云端定期把 Mieksido/surfcore 的 main 合进本仓库 main。
+# 和本地 `npm run sync:upstream` 等价，只是跑在 GitHub runner 上（电脑关机也能同步）。
+# 上游只读：不向上游推送、不提 PR；只用 GITHUB_TOKEN 推 origin/main。
+# 冲突时 job 失败，step summary 里列出冲突文件——到本地解决后推送即可。
+
+on:
+  schedule:
+    - cron: "0 4 * * *" # 每天 12:00 Asia/Shanghai（cron 用 UTC）
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: sync-upstream
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Git identity（bot）
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: 添加 upstream（只读）
+        run: |
+          git remote add upstream https://github.com/Mieksido/surfcore.git
+          git remote set-url --push upstream no_push
+          git fetch upstream --prune
+
+      - name: 打印上游状态
+        run: |
+          {
+            echo "### 上游 Mieksido/surfcore"
+            git log -1 --format='- HEAD `%h` %ad %s' --date=short upstream/main
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: 合并 upstream/main
+        id: merge
+        shell: bash
+        run: |
+          set -euo pipefail
+          behind=$(git rev-list --count HEAD..upstream/main)
+          echo "behind=$behind" >> "$GITHUB_OUTPUT"
+          {
+            echo "### 本次同步"
+            echo "- 落后上游：$behind 个提交"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if [ "$behind" = "0" ]; then
+            echo "- 已经是最新，无需同步" >> "$GITHUB_STEP_SUMMARY"
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          {
+            echo "- 上游新提交："
+            git log --oneline HEAD..upstream/main | sed 's/^/  - /'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if git merge upstream/main --no-edit; then
+            head_line=$(git log -1 --format='%h %s')
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            echo "- 合并完成：\`$head_line\`" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            {
+              echo ""
+              echo "- **合并冲突**：已放弃这次合并，main 未改动"
+              echo ""
+              echo '```'
+              git diff --name-only --diff-filter=U || true
+              echo '```'
+              echo "- 处理：本地 \`git pull && npm run sync:upstream\`，解决冲突后再推送"
+            } >> "$GITHUB_STEP_SUMMARY"
+            git merge --abort || true
+            exit 1
+          fi
+
+      - name: 推送到 origin/main
+        if: steps.merge.outputs.changed == 'true'
+        run: git push origin main

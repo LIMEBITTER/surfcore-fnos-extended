@@ -436,9 +436,10 @@ node scripts/setup-dsh.mjs      # 重装 preset + MCP
 | --- | --- |
 | 1 | 检查：在仓库里、当前分支是 `main`、工作区干净、没有未完成的合并 |
 | 2 | 确认 `upstream` 远端存在（缺了就加 `https://github.com/Mieksido/surfcore.git`），push 地址锁成 `no_push` |
-| 3 | `git fetch upstream --prune`，打印上游 HEAD 和「落后 N / 领先 M」 |
-| 4 | `git merge upstream/main`：生成合并提交、不重写 `main`；冲突就停下并列出冲突文件 |
-| 5 | `git push origin main`：只推自己的仓库 |
+| 3 | 对齐 `origin/main`（云端定时同步可能已推过一版），落后就快进 |
+| 4 | `git fetch upstream --prune`，打印上游 HEAD 和「落后 N / 领先 M」 |
+| 5 | `git merge upstream/main`：生成合并提交、不重写 `main`；冲突就停下并列出冲突文件 |
+| 6 | `git push origin main`：只推自己的仓库 |
 
 参数：`--dry-run` 只看上游多了什么、不动工作区；`--no-push` 合并不推。
 退出码：`0` 成功或已最新、`1` 前置条件不满足、`2` 合并冲突（工作区保留冲突现场）。
@@ -458,7 +459,10 @@ Register-ScheduledTask -TaskName 'surfcore-sync-upstream' -Action $action -Trigg
 
 > 也可以直接用任务计划程序 GUI：程序 `node`，参数 `scripts\sync-upstream.mjs`，起始于仓库目录。
 > 冲突那次任务会以非零退出码结束，日志里能看到 `exit code 2` 和冲突文件；解决完再跑一次即可。
-> 想在云端跑（电脑关机也同步）要加 GitHub Actions 定时 job，冲突同样得人工处理——要的话说一声。
+> **云端定时（已启用）**：`.github/workflows/sync-upstream.yml` 每天 UTC 04:00（北京时间 12:00）跑，
+> 也可以在仓库 Actions 页手动 *Run workflow*。它用仓库自带 `GITHUB_TOKEN` 推 `origin/main`，
+> 冲突时 job 失败并在 Summary 里列出冲突文件，处理方式和本地一样。
+> ⚠️ 仓库连续 60 天没活动时 GitHub 会自动停掉定时任务（会发邮件提醒），手动 Run 一次即可恢复。
 
 **手动等价命令**
 

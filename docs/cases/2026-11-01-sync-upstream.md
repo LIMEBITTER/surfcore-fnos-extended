@@ -26,6 +26,8 @@
 - 新增 `scripts/sync-upstream.mjs`：检查干净 → 确保 `upstream` 远端且 push = `no_push` → `fetch` →
   打印落后/领先与上游新提交 → `merge`（生成合并提交，不重写 `main`）→ `push origin main`；
 - 参数：`--dry-run` / `--no-push` / `--branch`；退出码 `0` / `1` / `2`（2 = 冲突，保留现场并打印四步）；
+- `.github/workflows/sync-upstream.yml`：云端每天 UTC 04:00 + 手动 `workflow_dispatch`，
+  用 `GITHUB_TOKEN` 推 `origin/main`；冲突时 job 失败并写 step summary；
 - `package.json` 增加 `npm run sync:upstream`；
 - README §11.3 换成「一条命令 + 定期执行 + 手动等价命令」，AGENTS §1.9.6 同步。
 
@@ -45,11 +47,25 @@
 - `node scripts/sync-upstream.mjs --dry-run`（工作区有未跟踪文件时）→ `✖ 工作区不干净，拒绝自动合并`，exit 1；
 - `--branch nope` → `✖ 当前在分支 main，同步目标是 nope`，exit 1；
 - 提交脚本后 `--dry-run` → 打印上游 HEAD、落后 0 / 领先 N、`✔ 已经是最新`，exit 0。
-- **没验证到的部分**：合并冲突分支（exit 2）和任务计划程序的注册步骤没有真跑（后者会改系统计划任务）。
-  冲突分支的逻辑就是 `git merge` 非零 + `git diff --diff-filter=U` 列文件，与手动冲突一致。
+- **临时仓库集成测试**（fake upstream 用本地 bare repo，跑完即删）：
+  - 用例 1：上游新增 1 个提交 → `✔ 已合并`，exit 0；
+  - 用例 2：两边改 README 第 2 行 → `✖ 合并冲突`，列出 `README.md`，exit 2，`git merge --abort` 可恢复；
+  - 期间发现并修掉一个误报：没配 git 身份时 `git merge` 以 128 失败，旧代码一律报「合并冲突」；
+    现在先看 `MERGE_HEAD` 是否存在，不在合并态就按真实错误退出 1。
+- 云端 workflow 的 YAML 用仓库自带的 `js-yaml` 解析通过（6 步、`schedule` + `workflow_dispatch`、`contents: write`）。
+- **没验证到的部分**：任务计划程序注册、云端 workflow 真跑都没有执行——
+  前者会改系统计划任务，后者会真的推一次仓库。
+
+## 云端定时（已加）
+
+- `.github/workflows/sync-upstream.yml`：`schedule` 每天 UTC 04:00（北京时间 12:00）+ `workflow_dispatch` 手动触发；
+  `permissions: contents: write`，用仓库自带 `GITHUB_TOKEN` 推 `origin/main`
+  （GITHUB_TOKEN 的推送不会触发其它 workflow，不会自激）；`concurrency: sync-upstream` 防并发；
+- 冲突时 `git merge --abort` + `exit 1`，step summary 列出冲突文件与下一步；
+- GitHub 在仓库连续 60 天无活动时会自动停用 schedule（发邮件），手动 Run 一次即可恢复。
 
 ## 遗留
 
-- 想云端定时（电脑关机也同步）：加 `.github/workflows/sync-upstream.yml`，用 `GITHUB_TOKEN` 推送；
-  冲突时 workflow 失败，仍需人工解决。
+- 云端和本地同时同步会撞：本地脚本第 3 步先快进 `origin/main`，快进不了就停下并提示
+  `git pull --no-rebase origin main`；
 - `docs/RELEASE-QUEUE.md` 的交接块：本次是工具链改动，未走发布流程。

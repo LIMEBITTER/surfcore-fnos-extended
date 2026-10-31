@@ -121,6 +121,7 @@
 6. **已脱离 fork 网络（2026-11-01）**：本仓库是独立仓库，上游的 Forks 列表、Network 图里都不再出现；
    随之失去网页 Sync fork 按钮，同步上游用 `npm run sync:upstream`
    （`scripts/sync-upstream.mjs`：fetch → merge → push origin；只读上游，见 README §11.3）。
+   云端另有 `.github/workflows/sync-upstream.yml`（GITHUB_TOKEN 推 origin/main，冲突时 job 失败）。
 
 ## 2. 环境事实（省得重新摸一遍）
 

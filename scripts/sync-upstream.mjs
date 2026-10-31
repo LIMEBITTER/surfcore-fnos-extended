@@ -101,7 +101,25 @@ if (!hasRemote) {
 git(['remote', 'set-url', '--push', UPSTREAM_REMOTE, 'no_push'], { allowFail: true });
 say('  push 地址锁定为 no_push（误推会失败）');
 
-// ── 2. fetch ─────────────────────────────────────────────────
+// ── 2. 对齐 origin（云端定时同步可能已经推过一版） ────────────
+head(`对齐 ${ORIGIN_REMOTE}/${TARGET_BRANCH}`);
+git(['fetch', ORIGIN_REMOTE, '--quiet']);
+const behindOrigin = Number(git(['rev-list', '--count', `HEAD..${ORIGIN_REMOTE}/${TARGET_BRANCH}`]).out);
+if (behindOrigin > 0) {
+  say(`  本地落后 ${ORIGIN_REMOTE}/${TARGET_BRANCH} ${behindOrigin} 个提交，先快进`);
+  const ff = git(['merge', '--ff-only', `${ORIGIN_REMOTE}/${TARGET_BRANCH}`], { allowFail: true });
+  if (!ff.ok) {
+    die(
+      `无法快进到 ${ORIGIN_REMOTE}/${TARGET_BRANCH}`,
+      `本地可能还有未推送的提交，先执行 git pull --no-rebase ${ORIGIN_REMOTE} ${TARGET_BRANCH} 再重试`,
+    );
+  }
+  say(`  已快进到 ${git(['rev-parse', '--short', 'HEAD']).out}`);
+} else {
+  say('  已与远端一致（或本地领先）');
+}
+
+// ── 3. fetch ─────────────────────────────────────────────────
 head(`fetch ${UPSTREAM_REMOTE}/${UPSTREAM_BRANCH}`);
 git(['fetch', UPSTREAM_REMOTE, '--prune', '--quiet']);
 const upstreamRev = git(['rev-parse', `refs/remotes/${UPSTREAM_REMOTE}/${UPSTREAM_BRANCH}`]).out;
@@ -127,10 +145,13 @@ if (DRY_RUN) {
   process.exit(0);
 }
 
-// ── 3. merge ─────────────────────────────────────────────────
+// ── 4. merge ─────────────────────────────────────────────────
 head(`合并 ${UPSTREAM_REMOTE}/${UPSTREAM_BRANCH} → ${TARGET_BRANCH}`);
 const merge = git(['merge', `refs/remotes/${UPSTREAM_REMOTE}/${UPSTREAM_BRANCH}`, '--no-edit'], { allowFail: true });
 if (!merge.ok) {
+  // 只有真的进入合并态（存在 MERGE_HEAD）才算冲突；否则是别的原因（没配 git 身份、索引锁……）。
+  const inMerge = git(['rev-parse', '--verify', '--quiet', 'MERGE_HEAD'], { allowFail: true }).ok;
+  if (!inMerge) die('合并失败（不是冲突，工作区没有进入合并态）', merge.err || merge.out);
   const conflicts = git(['diff', '--name-only', '--diff-filter=U'], { allowFail: true }).out;
   console.error('\n✖ 合并冲突，脚本已停下（工作区保留冲突现场）');
   if (conflicts) {
@@ -148,7 +169,7 @@ if (!merge.ok) {
 const headAfter = git(['rev-parse', '--short', 'HEAD']).out;
 say(`  合并完成：${headAfter}`);
 
-// ── 4. push origin ───────────────────────────────────────────
+// ── 5. push origin ───────────────────────────────────────────
 if (NO_PUSH) {
   say('\n✔ 已合并（--no-push：未推送）');
   process.exit(0);
