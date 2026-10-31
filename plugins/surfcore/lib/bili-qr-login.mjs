@@ -150,10 +150,9 @@ class Cdp {
 
 function killBrowser(browser) {
   if (!browser?.pid) return;
-  try { browser.kill('SIGTERM'); } catch {}
-  setTimeout(() => {
-    try { browser.kill('SIGKILL'); } catch {}
-  }, 1500).unref?.();
+  // detached 启动时浏览器是进程组 leader：连同 zygote 一起杀，避免留下孤儿进程。
+  try { process.kill(-browser.pid, 'SIGKILL'); } catch {}
+  try { browser.kill('SIGKILL'); } catch {}
 }
 
 function removeDir(dir) {
@@ -187,7 +186,7 @@ function cleanupSession(id) {
   sessions.delete(id);
   if (session.timer) clearTimeout(session.timer);
   try { session.cdp?.close(); } catch {}
-  killEdge(session.edge);
+  killBrowser(session.edge);
   removeDir(session.profileDir);
 }
 
@@ -416,7 +415,7 @@ export async function startQrLogin({ target = 'owner', expectedMid = '', expecte
   try {
     // 新老 Chromium 的 headless 参数不同：先 --headless=new，起不来再退回 --headless。
     for (const headlessFlag of ['--headless=new', '--headless']) {
-      const child = spawn(browserPath, [headlessFlag, ...browserArgs], { stdio: 'ignore', windowsHide: true });
+      const child = spawn(browserPath, [headlessFlag, ...browserArgs], { stdio: 'ignore', detached: true });
       child.on('error', (error) => { lastStartError = error; });
       try {
         await waitJson(`http://127.0.0.1:${port}/json/version`, START_WAIT_MS);
@@ -464,7 +463,7 @@ export async function startQrLogin({ target = 'owner', expectedMid = '', expecte
     };
   } catch (error) {
     try { cdp?.close(); } catch {}
-    killEdge(edge);
+    killBrowser(edge);
     removeDir(profileDir);
     throw error;
   }
