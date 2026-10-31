@@ -9,7 +9,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import crypto from 'node:crypto'
 // 2026-10-21 补：line 99 用到 gate 却没 import，发动态会 ReferenceError
-import { gate } from '../lib/quota-gate.mjs'
+import { gate, record } from '../lib/quota-gate.mjs'
 import { assertOutboundIdentitySafe } from '../lib/outbound-guard.mjs'
 
 const argv = process.argv.slice(2)
@@ -98,17 +98,15 @@ if (mode === 'post') {
   console.log(`  content-type: application/json    cookie: SESSDATA=***; bili_jct=***; buvid3=***`)
   console.log(`  正文(${text.length} 字): ${text}`)
   console.log(`  报文: ${body}`)
+  try {
+    assertOutboundIdentitySafe(text, { surface: 'B站 动态' });
+  } catch (error) {
+    console.error(`\n✗ ${error.message}`);
+    process.exit(9);
+  }
   if (isDry) { console.log('\n[dry] 未发布。'); process.exit(0) }
 // P0-5（Kimi 评审 #5）：写通道也要过限额闸；不通过就停手
 if (!gate({ type: 'dynamic', target: 'dynamic', auto: process.argv.includes('--auto') })) { console.error('拒绝：限额闸不通过（额度/白名单）'); process.exit(2) }
-// 出站身份闸（2026-10-23 用户要求：只准自己互认，不许泄露主人和别人的信息）
-// 动态是公开面：一旦把主人/别人的 QQ 号或 B站 mid 贴出去就收不回来；提示词只是概率约束，这里是硬拦。
-try {
-  assertOutboundIdentitySafe(text, { surface: 'B站 动态' });
-} catch (error) {
-  console.error(`\n✗ ${error.message}`);
-  process.exit(9);
-}
   const r = await fetch(url, {
     method: 'POST',
     headers: { 'user-agent': UA, referer: REF, origin: 'https://t.bilibili.com', 'content-type': 'application/json', cookie: cookieHeader },
@@ -118,6 +116,7 @@ try {
   console.log(`\n[go] HTTP ${r.status}  code=${out.code} message=${out.message ?? ''}`)
   if (out.code === 0) {
     const id = out.data?.dyn_id_str ?? out.data?.dyn_id
+    record({ type: 'dynamic', target: 'dynamic', note: String(text).slice(0, 40), auto: process.argv.includes('--auto') })
     console.log(`  ✅ 已发布  dyn_id=${id}`)
     console.log(`  https://t.bilibili.com/${id}`)
   } else {
