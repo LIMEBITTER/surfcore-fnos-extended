@@ -3176,3 +3176,12 @@ delivered 17 次（¥1.80），未交付 31 次（¥0.89）；keyword 12 次 0 �
 - **修法**（0.8.2）：流式写盘 + 30s 空闲超时；abort→download.timeout 并按 code 给 hint；
   body 失败继续试镜像；waitExit 60 分钟、过期写 stage.expired；进度条显示已下载/总量/速度/百分比。
 - **教训**：超时看“多久没进展”；错误分类决定还能不能换路；等待类超时必须在 UI 可见。
+
+## 回合进行中到的消息：wait 的 baseline 把「请求前到达」的未读算成已看
+
+- **现象**：模型跑到 wait 之间到的新消息看不到，本轮结束后才被补唤醒重新投一遍。
+- **根因**：wait 非 reply 分支用 `lastUnreadSeq`（请求这一刻）当基线，且 history 只取 recent 不取 unread；
+  请求前到达的消息因此永远进不了当前回合。
+- **修法**（0.8.3）：回合进行中基线改用 `readThroughSeqV2`，history 同时含 unread+recent；
+  工具返回附带 `unseenCount/unreadNotice` 提醒模型现在就 wait/unread。
+- **教训**：「请求时水位」不等于「模型已看水位」；长轮询要按“模型已消费”定义缺口，而不是按请求时刻。

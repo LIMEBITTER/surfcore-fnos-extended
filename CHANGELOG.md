@@ -4,6 +4,31 @@
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 发布规则见 [docs/guides/VERSIONS.md](docs/guides/VERSIONS.md)。
 
+## [0.8.3] - 2026-10-31
+
+### 修复（SnowLuma 没启动就弹“断线”L2）
+
+- 桥接本来只在“本次启动连上过”后才报断线（`everConnected`）；
+- 设置页额外过滤：当 `everConnected === false`（从未连上）时，把旧的 `send-channel-down`
+  事件自动确认，不再每次打开设置页都弹；
+- 清理 `everConnected` 重复声明。
+
+### 修复（每次打开设置页都自动弹更新窗口）
+
+- 更新弹窗改为**同一批版本只自动弹一次**（localStorage 记 `surfcore.updatePromptSeen`）；
+  「稍后」后不再每次进设置页都弹；有新版本时才再次提醒；概览「查看详情/去更新」入口保留。
+
+### 修复（回合进行中到达的消息看不到，只能等下一轮再投）
+
+- `qq_wait_for_messages` 非 reply 分支的基线从「请求时的 `lastUnreadSeq`」改为
+  **本回合开始时模型已看水位**（`readThroughSeqV2`）：本轮开始后、wait 之前到的消息会立即返回；
+- wait 的 `history` 同时包含 `unread` 与 `recentMessages`（仍受 getUnread/getRecent 开关约束），
+  不再只读 recent；
+- 工具返回新增 `unseenCount` / `unreadNotice`：本轮还有没看过的消息时，提醒模型立刻调 wait/unread，
+  别等下一轮（覆盖 state / snapshot / unread / recent / wait）；
+- wait 工具说明补上「本轮开始后、调用前到的消息也会返回」。
+
+
 ## [0.8.2] - 2026-10-31
 
 ### 修复（慢网络下更新必然失败：180 秒硬超时 + 误分类 + 不回退）

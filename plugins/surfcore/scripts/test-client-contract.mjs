@@ -438,4 +438,13 @@ assert.ok(source.includes('下载中'), '进度条应显示“下载中”');
 assert.ok(source.includes('speedBps'), '进度条应显示网速');
 assert.ok(source.includes('dl.percent'), '进度条应显示百分比');
 
+// ── 更新弹窗不能每次打开设置页都自动弹（2026-10-31 用户反馈）──
+assert.ok(source.includes('surfcore.updatePromptSeen'), '要记住“这个版本已提醒过”');
+assert.ok(source.includes('if (seen === sig) return'), '同一批版本不再自动弹');
+assert.ok(source.includes('updatePromptSignature'), '按版本集合生成提醒签名');
+
+// ── SnowLuma 没启动时，不该弹“断线”L2（2026-10-31 用户反馈）──
+assert.ok(source.includes('neverStarted'), '未启动（everConnected=false）也要过滤旧断线告警');
+assert.ok(source.includes('sl.everConnected === false'), '按 everConnected 判断“从未启动”');
+
 console.log('client contract tests OK');

@@ -1677,12 +1677,25 @@ F("toolsPath", "bili.mjs 路径", "留空 = 用合体插件自带的 tools/", "t
       // 手动导入 SnowLuma：先说明"导入的是什么"，再开选择框
       const [snowImport, setSnowImport] = useState(false);
       const [autoPrompted, setAutoPrompted] = useState(false);
+      // 更新弹窗只在「这个版本还没提醒过」时自动弹一次（2026-10-31 用户反馈：
+      // 每次打开设置页都弹，服务都还没启动就先被拦一下）。
+      // 记在 localStorage：同一批版本只自动弹一次；「稍后」也不会第二天重弹；换新版本会再提醒。
+      const UPDATE_PROMPT_SEEN_KEY = "surfcore.updatePromptSeen";
+      const updatePromptSignature = (results) => (Array.isArray(results) ? results : [])
+        .filter((x) => x && x.updateAvailable)
+        .map((x) => `${x.id ?? x.name ?? ""}@${x.latestVersion ?? x.latestSha ?? ""}`)
+        .sort().join("|");
       useEffect(() => {
-        if (!autoPrompted && updates?.showPrompt) {
-          setAutoPrompted(true);
-          setUpdateOpen(true);
-        }
-      }, [updates?.showPrompt, autoPrompted]);
+        if (autoPrompted || !updates?.showPrompt) return;
+        const sig = updatePromptSignature(updates.results);
+        if (!sig) return;
+        let seen = "";
+        try { seen = localStorage.getItem(UPDATE_PROMPT_SEEN_KEY) || ""; } catch {}
+        setAutoPrompted(true);
+        if (seen === sig) return; // 这个版本提醒过：只保留卡片入口，不再自动弹
+        try { localStorage.setItem(UPDATE_PROMPT_SEEN_KEY, sig); } catch {}
+        setUpdateOpen(true);
+      }, [updates?.showPrompt, updates?.results, autoPrompted]);
       const checkUpdates = async ({ openOnHit = true } = {}) => {
         setBusy("updates");
         try {
@@ -1723,8 +1736,11 @@ F("toolsPath", "bili.mjs 路径", "留空 = 用合体插件自带的 tools/", "t
           let events = r.events ?? [];
           // 已经连上 SnowLuma 时，旧的「send-channel-down」不该再弹（用户明明连着）。
           // 顺手自动确认掉，避免每次打开设置页都弹同一个 L2。
-          const connected = gateOverviewRef.current?.bridge?.snowluma?.connected === true;
-          if (connected) {
+          const sl = gateOverviewRef.current?.bridge?.snowluma ?? {};
+          // 已连接 → 旧的“断线”告警是历史；从没连过 → SnowLuma 根本还没启动，也不该弹。
+          const connected = sl.connected === true;
+          const neverStarted = sl.everConnected === false;
+          if (connected || neverStarted) {
             const stale = events.filter((e) => e.dedupeKey === "snowluma:send-channel-down");
             if (stale.length) {
               api("/gate-events", { method: "POST", body: { ids: stale.map((e) => e.id) } }).catch(() => {});
