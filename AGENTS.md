@@ -106,9 +106,18 @@
 
 1. **只往 fork 写**：`git push` 只允许 `origin`（`LIMEBITTER/surfcore-linux`）。
 2. **不碰上游**：不向上游推分支、不提 PR、不合并回上游；`upstream` 远端只允许 `fetch` 与 `git log`。
+   会在上游 PR / issue 里留下你的只有两种操作：① 向上游点 `Compare & pull request`（哪怕马上关闭，
+   也会留一条带你头像的 closed PR）；② 在提交信息 / PR 正文 / issue 里写 `Mieksido/surfcore#12`
+   或上游 issue 的完整链接 —— GitHub 会在上游那条 issue/PR 的时间线生成 “referenced this issue”
+   回链并通知订阅者。`#12` 不带 `owner/repo` 时只指向本仓库，安全。
 3. **提交信息要能当 changelog**：`type(scope): 一句话结果` + 空行 + 分条写「现象 / 修法 / 验证」；
    禁止 `update`、`fix`、`wip`、`调整` 这类空话（§1 第 9 条的具体化）。
 4. **不改写 main 历史**：不 `push --force`、不 rebase 已推送的 `main`；要撤改动走 `git revert`。
+5. **fork 内合并**：开 PR 时 base 必须是 `LIMEBITTER/surfcore-linux`（顶栏出现 “compare across forks”
+   且 base 是 Mieksido/surfcore，就立刻改回自己的仓库）；更稳妥的是本地 `git merge` 后
+   `git push origin main`，全程不产生任何上游事件。
+6. **上游 Forks 列表**：公开 fork 会出现在上游的 Forks 标签里（Network 图里也能看到提交），
+   但**不会**进 PR / issue 列表；这是 fork 网络的固有行为，不需要处理。
 
 ## 2. 环境事实（省得重新摸一遍）
 
