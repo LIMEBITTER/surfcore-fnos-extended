@@ -432,4 +432,10 @@ assert.ok(source.includes('event.evidence?.tool'), '安全提醒要显示工具�
 assert.ok(source.includes('event.evidence?.fingerprint'), '安全提醒要显示错误摘要');
 assert.ok(source.includes('event.subject?.key'), '安全提醒要显示会话');
 
+// ── 更新下载进度：速度 + 百分比（2026-10-31 用户要求）──
+assert.ok(source.includes('st?.download'), '应用更新时要轮询下载进度');
+assert.ok(source.includes('下载中'), '进度条应显示“下载中”');
+assert.ok(source.includes('speedBps'), '进度条应显示网速');
+assert.ok(source.includes('dl.percent'), '进度条应显示百分比');
+
 console.log('client contract tests OK');

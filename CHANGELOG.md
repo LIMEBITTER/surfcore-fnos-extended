@@ -4,6 +4,17 @@
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 发布规则见 [docs/guides/VERSIONS.md](docs/guides/VERSIONS.md)。
 
+## [0.8.2] - 2026-10-31
+
+### 修复（慢网络下更新必然失败：180 秒硬超时 + 误分类 + 不回退）
+
+- 下载改为**流式写盘 + 30 秒空闲超时**（有数据就续命，另设 20 分钟兜底），不再用 180 秒总时长覆盖整个 body；
+- 新增 `classifyDownloadFailure()`：超时→`download.timeout`、HTTP→`download.http-N`、磁盘→`download.write-failed`、其余→`download.network`，hint 按 code 分支；
+- **body 阶段失败不再直接返回**，继续试下一个候选（codeload / 镜像），诊断记录每个地址结果；
+- 更新助手等 DSH 退出 15 分钟 → **60 分钟**；超时写 `stage.expired`，卡片提示“上次暂存已过期，请重新下载”；
+- 更新弹窗显示下载进度：**已下载 / 总量 / 网速 / 百分比**（`status().download` + 每秒轮询）。
+
+
 ## [0.8.1] - 2026-10-31
 
 ### 修复（B站 / 桌宠缺少语气层）

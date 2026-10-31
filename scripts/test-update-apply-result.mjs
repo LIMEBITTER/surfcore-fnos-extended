@@ -83,6 +83,16 @@ try {
     pluginLog: () => {},
   });
 
+  // 0) 下载失败分类（2026-10-31：慢网超时被误报成 write-failed）
+  {
+    const { classifyDownloadFailure } = await import('../plugins/surfcore/lib/updates.js');
+    ok(classifyDownloadFailure({ aborted: true }).code === 'download.timeout', 'abort → download.timeout');
+    ok(classifyDownloadFailure({ httpStatus: 404 }).code === 'download.http-404', 'HTTP 404 → download.http-404');
+    ok(classifyDownloadFailure({ fsError: true }).code === 'download.write-failed', 'fs 错误 → download.write-failed');
+    ok(classifyDownloadFailure({ error: 'ECONNRESET' }).code === 'download.network', '网络错误 → download.network');
+    ok(/网络太慢/.test(classifyDownloadFailure({ aborted: true }).hint), '超时的 hint 指向网络而不是磁盘');
+  }
+
   // 1) 下载 404 → 失败带 code/hint
   {
     const dir = makeTarget('dl-404', '0.6.22', { withMeta: true });
@@ -250,6 +260,87 @@ try {
       ok(blocked || noPending, '没有版本号 → 阻止自动更新', JSON.stringify(row));
       ok(/未发版|没有对应的发布版本/.test(String(row.reason)), '原因说明"没有发布版本"', String(row.reason));
     } finally { restore(); delete process.env.SURFCORE_UPDATE_NO_SPAWN; }
+  }
+
+  // 3.55) 慢网断流：空闲超时归为 download.timeout，并且继续试下一个候选（镜像回退）
+  {
+    const dir = makeTarget('slow-dl', '0.6.22', { withMeta: true });
+    const svc = mkService(dir, { archiveUrl: '' });
+    const seen = [];
+    const restore = stubFetch(async (u) => {
+      if (u.includes('/releases/latest')) return new Response(null, { status: 302, headers: { location: 'https://github.com/Mieksido/surfcore-test/releases/tag/v0.7.0' } });
+      if (!u.includes('/zip/') && !u.includes('/archive/') && !u.startsWith('https://gh-')) return undefined;
+      seen.push(u);
+      // 先给一小段数据，然后长时间不再给 → 触发空闲超时
+      const stream = new ReadableStream({
+        start(c) {
+          c.enqueue(new Uint8Array([80, 75, 3, 4]));
+          setTimeout(() => c.error(Object.assign(new Error('aborted'), { name: 'AbortError' })), 120);
+        },
+      });
+      return new Response(stream, { status: 200 });
+    });
+    process.env.SURFCORE_UPDATE_NO_SPAWN = '1';
+    process.env.SURFCORE_UPDATE_IDLE_TIMEOUT_MS = '40';
+    try {
+      await svc.check({ fetch: true });
+      const r = await svc.apply(['surfcore']);
+      const row = r.results[0];
+      ok(row.ok === false && row.code === 'download.timeout', '慢网断流 → download.timeout', JSON.stringify(row));
+      ok(/网络太慢|断流/.test(String(row.hint)), '超时 hint 指向网络', String(row.hint));
+      ok(seen.length >= 2, 'body 失败后继续试了下一个候选（镜像回退）', seen.join(' | '));
+    } finally { restore(); delete process.env.SURFCORE_UPDATE_NO_SPAWN; delete process.env.SURFCORE_UPDATE_IDLE_TIMEOUT_MS; }
+  }
+
+  // 3.555) 下载进度：status().download 应能看到 bytes/total/percent/speed
+  {
+    const dir = makeTarget('progress', '0.6.22', { withMeta: true });
+    const svc = mkService(dir, { archiveUrl: '' });
+    const restore = stubFetch(async (u) => {
+      if (u.includes('/releases/latest')) return new Response(null, { status: 302, headers: { location: 'https://github.com/Mieksido/surfcore-test/releases/tag/v0.7.0' } });
+      if (!u.includes('/zip/') && !u.includes('/archive/')) return undefined;
+      const stream = new ReadableStream({
+        start(c) {
+          c.enqueue(new Uint8Array(400));
+          setTimeout(() => c.enqueue(new Uint8Array(300)), 80);
+          setTimeout(() => { try { c.close(); } catch {} }, 160);
+        },
+      });
+      return new Response(stream, { status: 200, headers: { 'content-length': '1000' } });
+    });
+    process.env.SURFCORE_UPDATE_NO_SPAWN = '1';
+    try {
+      await svc.check({ fetch: true });
+      const p = svc.apply(['surfcore']);
+      let mid = null;
+      for (let i = 0; i < 150 && !mid?.active; i += 1) {
+        await new Promise((r) => setTimeout(r, 20));
+        const d = svc.status().download;
+        if (d && d.bytes > 0) mid = d;
+      }
+      ok(mid?.active === true && mid.bytes > 0 && mid.total === 1000, '下载中能看到已下载/总量', JSON.stringify(mid));
+      ok(mid.percent === 40 || mid.percent === 30 || (mid.percent > 0 && mid.percent < 100), '百分比按 Content-Length 计算', String(mid.percent));
+      const r = await p;
+      ok(r.results[0].ok === false, '坏包最终仍会失败（进度不影响失败可见）');
+    } finally { restore(); delete process.env.SURFCORE_UPDATE_NO_SPAWN; }
+  }
+
+  // 3.56) 助手过期：.failed(code=stage.expired) 要被 status 读出来并给“重新下载”建议
+  {
+    const dir = makeTarget('expired', '0.6.22', { withMeta: true });
+    const stateDir = path.join(dir, '.state');
+    fs.mkdirSync(stateDir, { recursive: true });
+    fs.writeFileSync(path.join(stateDir, 'updates-pending.json.failed'), JSON.stringify({
+      component: 'surfcore', code: 'stage.expired', error: '等 DSH 退出超时（60 分钟）：本次暂存已过期，需要重新下载', at: new Date().toISOString(),
+    }));
+    const svc = createUpdatesService({
+      stateDir,
+      components: () => [{ id: 'surfcore', name: 'SurfCore 本体', dir, kind: 'version', versionRepo: 'Mieksido/t' }],
+      pluginLog: () => {},
+    });
+    const la = svc.status().lastApply;
+    ok(la?.status === 'failed' && la.code === 'stage.expired', '过期暂存 → lastApply.code=stage.expired', JSON.stringify(la));
+    ok(/过期|重新下载/.test(String(la.hint)), '过期提示让用户重新下载', String(la.hint));
   }
 
   // 3.6) 有版本号时下载 tag 归档（main.zip 会漂移，和清单对不上）

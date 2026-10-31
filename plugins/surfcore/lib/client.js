@@ -1394,6 +1394,14 @@ F("toolsPath", "bili.mjs 路径", "留空 = 用合体插件自带的 tools/", "t
       const [selected, setSelected] = useState(() => new Set(pending.map((item) => item.id)));
       const [never, setNever] = useState(false);
       const [working, setWorking] = useState(false);
+      // 下载进度：应用期间轮询 /updates，显示已下载/总量/速度/百分比（2026-10-31 用户要求）
+      const [dl, setDl] = useState(null);
+      const sizeText = (n) => (Number(n) > 0 ? `${(Number(n) / 1024 / 1024).toFixed(1)} MB` : "0 MB");
+      const speedText = (n) => {
+        const v = Number(n) || 0;
+        if (v <= 0) return "";
+        return v >= 1024 * 1024 ? `${(v / 1024 / 1024).toFixed(1)} MB/s` : `${Math.round(v / 1024)} KB/s`;
+      };
       const toggle = (id) => setSelected((prev) => {
         const next = new Set(prev);
         if (next.has(id)) next.delete(id); else next.add(id);
@@ -1403,6 +1411,13 @@ F("toolsPath", "bili.mjs 路径", "留空 = 用合体插件自带的 tools/", "t
         const ids = [...selected];
         if (!ids.length) return;
         setWorking(true);
+        setDl(null);
+        const poll = setInterval(async () => {
+          try {
+            const st = await api("/updates");
+            if (st?.download) setDl(st.download);
+          } catch {}
+        }, 1000);
         try {
           const r = await api("/updates", { method: "POST", body: { action: "apply", ids } });
           const failed = (r.results ?? []).filter((x) => !x.ok);
@@ -1417,7 +1432,7 @@ F("toolsPath", "bili.mjs 路径", "留空 = 用合体插件自带的 tools/", "t
           }
           onDone?.(r);
         } catch (e) { toast(`✗ 更新失败：${e.message}`); }
-        finally { setWorking(false); }
+        finally { clearInterval(poll); setDl(null); setWorking(false); }
       };
       const dismissThis = async () => {
         setWorking(true);
@@ -1485,7 +1500,12 @@ F("toolsPath", "bili.mjs 路径", "留空 = 用合体插件自带的 tools/", "t
               } }, "复制诊断"),
               h(Btn, { kind: "qbw-btn2", onClick: () => window.open("https://github.com/Mieksido/surfcore/releases/latest", "_blank", "noopener") }, "去下载新版")));
           })(),
-          working ? h(ProgressBar, { phase: "正在下载/应用更新…", indeterminate: true }) : null),
+          working ? (dl?.active
+            ? h(ProgressBar, {
+                pct: dl.percent ?? 0,
+                phase: `下载中 ${sizeText(dl.bytes)}${dl.total ? ` / ${sizeText(dl.total)}` : ""}${dl.speedBps ? ` · ${speedText(dl.speedBps)}` : ""}${dl.percent != null ? ` · ${dl.percent}%` : ""}`,
+              })
+            : h(ProgressBar, { phase: "正在下载/应用更新…", indeterminate: true })) : null),
           h("div", { className: "qbw-actions", style: { flexShrink: 0, paddingTop: "10px" } },
             h(Btn, { kind: "qbw-btn2", onClick: () => (never ? dismissThis() : onClose?.()), disabled: working },
               never ? "不再提示本次" : "稍后"),

@@ -30,6 +30,29 @@ const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..
 const MAX_CHANGELOG = 20;
 const DEFAULT_BRANCH = 'main';
 
+// 下载超时策略（2026-10-31 用户反馈，27.6 KB/s 下 7.8MB 要 281 秒）：
+//   · 空闲超时：连续 N 秒没有新数据才中断（有进度就续命）；
+//   · 总上限：只用来兜底极端卡死。
+// 之前是 AbortSignal.timeout(180s) 覆盖整个 body → 慢网必然失败。
+const DOWNLOAD_IDLE_TIMEOUT_MS = 30_000;
+const DOWNLOAD_MAX_TOTAL_MS = 20 * 60_000;
+const DOWNLOAD_HINTS = {
+  'download.timeout': '网络太慢/断流：稍后重试，或到 Release 页手动下载 zip 覆盖',
+  'download.network': '连不上 GitHub/codeload：检查网络或代理后重试',
+  'download.write-failed': '磁盘空间不足或目录没有写权限：清理空间/换安装目录后重试',
+};
+
+/** 下载失败归类（纯函数，单测覆盖）：abort→timeout；HTTP→http-N；fs→write-failed；其余→network。 */
+export function classifyDownloadFailure({ aborted = false, httpStatus = 0, fsError = false, error = null } = {}) {
+  if (fsError) return { code: 'download.write-failed', hint: DOWNLOAD_HINTS['download.write-failed'] };
+  if (aborted) return { code: 'download.timeout', hint: DOWNLOAD_HINTS['download.timeout'] };
+  if (httpStatus) return { code: `download.http-${httpStatus}`, hint: httpStatus === 404 ? '这个版本可能已被撤下：稍后重试或手动下载' : '稍后重试；持续失败可手动下载' };
+  return {
+    code: 'download.network',
+    hint: `${DOWNLOAD_HINTS['download.network']}${error ? `（${String(error).slice(0, 120)}）` : ''}`,
+  };
+}
+
 // 可选的 GitHub token：填了就把匿名 60 次/小时 换成账号的 5000 次/小时。
 // 只用于 api.github.com 的读取请求；不写日志、不进诊断信息。
 let githubToken = '';
@@ -848,6 +871,8 @@ export function createUpdatesService({ stateDir, components, blockedReason = () 
   const file = path.join(stateDir, 'updates.json');
   const now = () => Date.now();
   let state = { dismissed: {}, lastCheckAt: 0, results: [], lastError: '', lastApplyFailure: null, applyBackoff: {} };
+  // 下载进度（只在内存里，供 UI 轮询；不持久化）
+  let downloadProgress = null;
   try {
     const raw = JSON.parse(fs.readFileSync(file, 'utf8'));
     if (raw && typeof raw === 'object') {
@@ -1016,10 +1041,15 @@ export function createUpdatesService({ stateDir, components, blockedReason = () 
     try {
       if (fs.existsSync(`${pendingFile}.failed`)) {
         const j = JSON.parse(fs.readFileSync(`${pendingFile}.failed`, 'utf8'));
+        const code = String(j.code || 'apply.failed');
         return {
-          status: 'failed', code: 'apply.failed', component: j.component ?? '',
+          status: 'failed', code, component: j.component ?? '',
           reason: String(j.error ?? '应用更新失败').slice(0, 300),
-          hint: '备份与 staging 仍保留；可重试或手动覆盖 zip',
+          hint: code === 'stage.expired'
+            ? '上次暂存已过期（等 DSH 退出的时间太久）：点「立即更新」重新下载即可'
+            : code === 'verify.version-mismatch'
+              ? '发布包与清单不一致：手动下载该版本覆盖，重试无效'
+              : '备份与 staging 仍保留；可重试或手动覆盖 zip',
           at: j.at ?? null,
         };
       }
@@ -1071,6 +1101,7 @@ export function createUpdatesService({ stateDir, components, blockedReason = () 
       pending,
       pendingCount: pending.length,
       lastApply: state.lastApplyFailure ?? readLastApply(),
+      download: downloadProgress,
       githubTokenConfigured: githubTokenConfigured(),
       showPrompt: pending.length > 0,
     };
@@ -1238,57 +1269,88 @@ export function createUpdatesService({ stateDir, components, blockedReason = () 
     }
     const zipFile = path.join(stagingRoot, 'pkg.zip');
     try {
-      // 依次试 codeload / 镜像；把试过的地址写进诊断，失败时能看出是哪个域名不通。
+      // 依次试 codeload / 镜像；**流式写盘 + 空闲超时**：慢网只要还在出数据就不算超时。
       const tried = [];
-      let res = null;
-      let lastError = null;
-      let lastStatus = 0;
-      // 组件显式配了 archiveUrl 就只试它（尊重配置）；否则按 codeload → 归档 → 镜像 依次回退。
+      let downloaded = null; // { bytes, elapsedMs, url }
+      const idleMs = Math.max(5_000, Number(process.env.SURFCORE_UPDATE_IDLE_TIMEOUT_MS) || DOWNLOAD_IDLE_TIMEOUT_MS);
       const candidates = [url, ...(String(item.archiveUrl || '').startsWith('http') ? [] : urls.filter((u) => u !== url))];
+
       for (const candidate of candidates) {
-        tried.push(candidate);
         pluginLog(`[updates] 下载 ${candidate}`);
+        const startedAt = Date.now();
+        const controller = new AbortController();
+        let idleTimer = setTimeout(() => controller.abort(), idleMs);
+        const totalTimer = setTimeout(() => controller.abort(), DOWNLOAD_MAX_TOTAL_MS);
+        let fh = null;
         try {
-          const r = await fetch(candidate, { signal: AbortSignal.timeout(180_000) });
-          if (r.ok) { res = r; break; }
-          lastStatus = r.status;
+          const r = await fetch(candidate, { signal: controller.signal });
+          if (!r.ok) {
+            tried.push({ url: candidate, outcome: `http-${r.status}` });
+            continue;
+          }
+          const reader = r.body?.getReader?.();
+          if (!reader) {
+            tried.push({ url: candidate, outcome: 'no-body' });
+            continue;
+          }
+          const totalBytes = Number(r.headers.get('content-length')) || 0;
+          downloadProgress = { active: true, url: candidate, bytes: 0, total: totalBytes, percent: totalBytes ? 0 : null, speedBps: 0, startedAt };
+          fh = fs.openSync(zipFile, 'w');
+          let bytes = 0;
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            fs.writeSync(fh, value);
+            bytes += value.length;
+            const elapsed = Math.max(1, Date.now() - startedAt);
+            downloadProgress = {
+              ...downloadProgress,
+              bytes,
+              speedBps: Math.round(bytes / (elapsed / 1000)),
+              percent: totalBytes ? Math.min(100, Math.round((bytes / totalBytes) * 100)) : null,
+            };
+            clearTimeout(idleTimer);
+            idleTimer = setTimeout(() => controller.abort(), idleMs); // 有数据就续命
+          }
+          fs.closeSync(fh); fh = null;
+          downloadProgress = { ...downloadProgress, active: false, bytes, percent: downloadProgress?.percent ?? null };
+          downloaded = { bytes, elapsedMs: Date.now() - startedAt, url: candidate };
+          break;
         } catch (error) {
-          lastError = error;
+          if (fh != null) { try { fs.closeSync(fh); } catch {} fh = null; }
+          const aborted = /abort|timeout/i.test(String(error?.name ?? error?.message ?? ''));
+          const fsError = /ENOSPC|EACCES|EPERM|EBUSY|EROFS/i.test(String(error?.code ?? error?.message ?? ''));
+          tried.push({ url: candidate, outcome: aborted ? 'timeout' : fsError ? 'fs' : String(error?.message ?? error).slice(0, 80) });
+          // 注意：**不要在这里 return** —— body 阶段失败也要继续试下一个镜像。
+        } finally {
+          clearTimeout(idleTimer);
+          clearTimeout(totalTimer);
         }
       }
-      if (!res) {
-        const aborted = /abort|timeout/i.test(String(lastError?.name ?? lastError?.message ?? ''));
+
+      if (!downloaded) {
+        downloadProgress = { ...(downloadProgress ?? {}), active: false };
+        const last = tried[tried.length - 1] ?? {};
+        const httpStatus = /^http-(\d+)$/.exec(String(last.outcome || ''))?.[1];
+        const info = classifyDownloadFailure({
+          aborted: tried.some((x) => x.outcome === 'timeout'),
+          httpStatus: httpStatus ? Number(httpStatus) : 0,
+          fsError: tried.some((x) => x.outcome === 'fs'),
+          error: last.outcome,
+        });
         return fail({
-          ok: false, status: 'failed', stage: 'download',
-          code: aborted ? 'download.timeout' : lastStatus ? `download.http-${lastStatus}` : 'download.network',
-          reason: aborted
-            ? '下载超时（180 秒）'
-            : lastStatus
-              ? `下载失败：服务器返回 HTTP ${lastStatus}`
-              : `下载失败：${String(lastError?.message ?? lastError ?? '所有地址都不可用').slice(0, 160)}`,
-          hint: '检查网络后重试；持续失败可手动下载安装包（会自动尝试 codeload 与镜像）',
-          retryable: true,
+          ok: false, status: 'failed', stage: 'download', code: info.code,
+          reason: info.code === 'download.timeout'
+            ? `下载超时：${Math.round(idleMs / 1000)} 秒没有新数据（或超过总上限）`
+            : info.code === 'download.write-failed'
+              ? `下载内容写入失败：磁盘空间/目录权限（${String(last.outcome).slice(0, 80)}）`
+              : `下载失败：${String(last.outcome ?? '所有地址都不可用').slice(0, 160)}`,
+          hint: info.hint,
+          retryable: info.code !== 'download.write-failed',
           diagnostics: { tried },
         });
       }
-      if (!res.ok) {
-        return fail({
-          ok: false, status: 'failed', stage: 'download', code: `download.http-${res.status}`,
-          reason: `下载失败：服务器返回 HTTP ${res.status}`,
-          hint: res.status === 404 ? '这个版本可能已被撤下，稍后重试或手动下载' : '稍后重试；持续失败可手动下载安装包',
-          retryable: true,
-        });
-      }
-      try {
-        fs.writeFileSync(zipFile, Buffer.from(await res.arrayBuffer()));
-      } catch (error) {
-        return fail({
-          ok: false, status: 'failed', stage: 'download', code: 'download.write-failed',
-          reason: `下载内容写入失败：${String(error?.message ?? error).slice(0, 160)}`,
-          hint: '检查磁盘空间与目录权限后重试',
-        });
-      }
-
+      pluginLog(`[updates] 下载完成：${(downloaded.bytes / 1024 / 1024).toFixed(2)} MB，${(downloaded.elapsedMs / 1000).toFixed(1)} 秒（${downloaded.url}）`);
       try {
         await new Promise((resolve, reject) => {
           execFile('powershell', ['-NoProfile', '-Command',
@@ -1459,6 +1521,7 @@ export function createUpdatesService({ stateDir, components, blockedReason = () 
     const wanted = new Set((Array.isArray(ids) ? ids : []).map(String));
     if (!wanted.size) return { ok: false, error: '没有选择要更新的组件', results: [] };
     applying = true;
+    downloadProgress = null;
     try {
       // 更新前重新检查一次：用户可能刚改过文件、远端也可能又变了
       await check({ fetch: true });

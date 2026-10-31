@@ -61,7 +61,9 @@ function alive(pid) {
   }
 }
 
-async function waitExit(pid, timeoutMs = 15 * 60_000) {
+// 15 分钟太短：用户可能暂存后过一阵才退出（2026-10-31 实测 15 分钟后才关，更新被静默放弃）。
+// 改成 60 分钟；超时会写 .failed（stage.expired），卡片能看到“上次暂存已过期，请重新下载”。
+async function waitExit(pid, timeoutMs = 60 * 60_000) {
   if (!pid) return true;
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
@@ -111,7 +113,14 @@ try {
   log(`[apply-update] 等待 DSH 退出（pid=${pending.waitPid ?? '?'}）…`);
   const exited = await waitExit(pending.waitPid);
   if (!exited) {
-    log('[apply-update] 等超时（15 分钟宿主还没退出），放弃本次更新；可手动重试');
+    const reason = '等 DSH 退出超时（60 分钟）：本次暂存已过期，需要重新下载';
+    log(`[apply-update] ${reason}`);
+    try {
+      fs.writeFileSync(`${pendingFile}.failed`, JSON.stringify({
+        ...pending, error: reason, code: 'stage.expired', at: new Date().toISOString(),
+      }, null, 2));
+      fs.rmSync(pendingFile, { force: true });
+    } catch {}
     process.exit(3);
   }
   log(`[apply-update] 宿主已退出，开始应用 ${pending.kind} → ${pending.target}`);
