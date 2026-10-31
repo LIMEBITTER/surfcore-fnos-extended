@@ -12,7 +12,9 @@
  *   · 不写日志、不回显 SESSDATA；`readOwnerAccount()` 只返回 mid/昵称/时间；
  *   · 校验扫码的 mid 是否等于配置里的 owner.mid；不一致就拒绝保存（防串号）。
  *
- * 依赖：Windows + Edge（本项目本来就是 Windows-only；Edge 缺失时返回可读错误）。
+ * 本 fork 只支持 Linux：浏览器优先用 SURFCORE_BROWSER 指向的可执行文件，
+ * 否则扫 PATH 找 chromium / google-chrome / microsoft-edge（含 /snap/bin）。
+ * 找不到时返回可读错误，并在提示里给出 apt 安装方法。
  */
 import fs from 'node:fs';
 import net from 'node:net';
@@ -31,17 +33,42 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 const sessions = new Map();
 
-function findEdge() {
-  const candidates = [
-    process.env.SURFCORE_EDGE,
-    path.join(process.env['PROGRAMFILES(X86)'] || 'C:\\Program Files (x86)', 'Microsoft', 'Edge', 'Application', 'msedge.exe'),
-    path.join(process.env.PROGRAMFILES || 'C:\\Program Files', 'Microsoft', 'Edge', 'Application', 'msedge.exe'),
-    process.env.LOCALAPPDATA ? path.join(process.env.LOCALAPPDATA, 'Microsoft', 'Edge', 'Application', 'msedge.exe') : '',
-  ].filter(Boolean);
-  for (const candidate of candidates) {
-    try { if (fs.existsSync(candidate)) return candidate; } catch {}
+function isExecutableFile(file) {
+  try {
+    if (!file) return false;
+    fs.accessSync(file, fs.constants.X_OK);
+    return fs.statSync(file).isFile();
+  } catch {
+    return false;
+  }
+}
+
+function which(command) {
+  if (!command) return '';
+  if (path.isAbsolute(command)) return isExecutableFile(command) ? command : '';
+  for (const dir of String(process.env.PATH ?? '').split(path.delimiter)) {
+    if (!dir) continue;
+    const candidate = path.join(dir, command);
+    if (isExecutableFile(candidate)) return candidate;
   }
   return '';
+}
+
+/**
+ * 找一个 Chromium 内核浏览器（Linux-only；Edge/Chrome/Chromium 都能驱动 CDP）。
+ * @returns {string} 可执行文件绝对路径；找不到返回空字符串。
+ */
+export function findBrowser() {
+  const explicit = String(process.env.SURFCORE_BROWSER ?? '').trim();
+  if (explicit && isExecutableFile(explicit)) return explicit;
+
+  const candidates = [];
+  for (const name of ['chromium', 'chromium-browser', 'google-chrome', 'google-chrome-stable', 'microsoft-edge', 'microsoft-edge-stable', 'brave-browser']) {
+    const hit = which(name);
+    if (hit) candidates.push(hit);
+  }
+  candidates.push('/snap/bin/chromium');
+  return candidates.find((file) => isExecutableFile(file)) ?? '';
 }
 
 function freePort() {
@@ -64,7 +91,7 @@ async function waitJson(url, timeoutMs) {
     } catch {}
     await sleep(250);
   }
-  throw new Error(`Edge 调试端口没响应（${Math.round(timeoutMs / 1000)} 秒）`);
+  throw new Error(`浏览器调试端口没响应（${Math.round(timeoutMs / 1000)} 秒）`);
 }
 
 class Cdp {
@@ -82,23 +109,23 @@ class Cdp {
       else resolve(message.result);
     });
     ws.addEventListener('close', () => {
-      for (const { reject } of this.pending.values()) reject(new Error('Edge 调试连接已关闭'));
+      for (const { reject } of this.pending.values()) reject(new Error('浏览器调试连接已关闭'));
       this.pending.clear();
     });
   }
 
   static connect(url) {
-    if (typeof WebSocket !== 'function') return Promise.reject(new Error('当前运行时没有 WebSocket，无法驱动 Edge'));
+    if (typeof WebSocket !== 'function') return Promise.reject(new Error('当前运行时没有 WebSocket，无法驱动浏览器'));
     return new Promise((resolve, reject) => {
       const ws = new WebSocket(url);
-      const timer = setTimeout(() => { try { ws.close(); } catch {} reject(new Error('连接 Edge 调试端口超时')); }, 10_000);
+      const timer = setTimeout(() => { try { ws.close(); } catch {} reject(new Error('连接浏览器调试端口超时')); }, 10_000);
       ws.addEventListener('open', () => { clearTimeout(timer); resolve(new Cdp(ws)); }, { once: true });
-      ws.addEventListener('error', () => { clearTimeout(timer); reject(new Error('连接 Edge 调试端口失败')); }, { once: true });
+      ws.addEventListener('error', () => { clearTimeout(timer); reject(new Error('连接浏览器调试端口失败')); }, { once: true });
     });
   }
 
   send(method, params = {}) {
-    if (!this.ws || this.ws.readyState !== 1) return Promise.reject(new Error('Edge 调试连接不可用'));
+    if (!this.ws || this.ws.readyState !== 1) return Promise.reject(new Error('浏览器调试连接不可用'));
     const id = this.nextId++;
     return new Promise((resolve, reject) => {
       this.pending.set(id, { resolve, reject });
@@ -121,14 +148,11 @@ class Cdp {
   }
 }
 
-function killEdge(edge) {
-  if (!edge?.pid) return;
-  try { edge.kill(); } catch {}
-  setTimeout(() => {
-    try {
-      spawn('taskkill', ['/pid', String(edge.pid), '/T', '/F'], { stdio: 'ignore', windowsHide: true });
-    } catch {}
-  }, 400).unref?.();
+function killBrowser(browser) {
+  if (!browser?.pid) return;
+  // detached 启动时浏览器是进程组 leader：连同 zygote 一起杀，避免留下孤儿进程。
+  try { process.kill(-browser.pid, 'SIGKILL'); } catch {}
+  try { browser.kill('SIGKILL'); } catch {}
 }
 
 function removeDir(dir) {
@@ -162,7 +186,7 @@ function cleanupSession(id) {
   sessions.delete(id);
   if (session.timer) clearTimeout(session.timer);
   try { session.cdp?.close(); } catch {}
-  killEdge(session.edge);
+  killBrowser(session.edge);
   removeDir(session.profileDir);
 }
 
@@ -367,23 +391,46 @@ export function readOwnerAccount() {
 export async function startQrLogin({ target = 'owner', expectedMid = '', expectedName = '', allowSameAsOwner = false } = {}) {
   closeAllQrLogins();          // 同时只保留一个扫码会话，避免多个 Edge 泄漏
   cleanupStaleProfiles();
-  const edgePath = findEdge();
-  if (!edgePath) throw new Error('找不到 Edge（可设 SURFCORE_EDGE 指向 msedge.exe）');
+  const browserPath = findBrowser();
+  if (!browserPath) {
+    throw new Error(
+      '找不到 Chromium 内核浏览器。Linux 请先安装：sudo apt install chromium'
+      + '（或 google-chrome / microsoft-edge），也可用 SURFCORE_BROWSER 指向浏览器可执行文件。'
+    );
+  }
   const profileDir = fs.mkdtempSync(path.join(os.tmpdir(), 'surfcore-bili-qr-'));
   const port = await freePort();
-  const edge = spawn(edgePath, [
-    '--headless=new', '--disable-gpu', '--no-first-run', '--no-default-browser-check',
+  const browserArgs = [
+    '--disable-gpu', '--no-first-run', '--no-default-browser-check', '--disable-dev-shm-usage',
+    ...(typeof process.getuid === 'function' && process.getuid() === 0 ? ['--no-sandbox'] : []),
     `--remote-debugging-port=${port}`,
     `--user-data-dir=${profileDir}`,
     '--window-size=560,760',
     'about:blank',
-  ], { stdio: 'ignore', windowsHide: true });
+  ];
 
   let cdp = null;
+  let edge = null;
+  let lastStartError = null;
   try {
+    // 新老 Chromium 的 headless 参数不同：先 --headless=new，起不来再退回 --headless。
+    for (const headlessFlag of ['--headless=new', '--headless']) {
+      const child = spawn(browserPath, [headlessFlag, ...browserArgs], { stdio: 'ignore', detached: true });
+      child.on('error', (error) => { lastStartError = error; });
+      try {
+        await waitJson(`http://127.0.0.1:${port}/json/version`, START_WAIT_MS);
+        edge = child;
+        lastStartError = null;
+        break;
+      } catch (error) {
+        lastStartError = error;
+        killBrowser(child);
+      }
+    }
+    if (!edge) throw lastStartError ?? new Error('浏览器启动失败');
     await waitJson(`http://127.0.0.1:${port}/json/version`, START_WAIT_MS);
     const tabRes = await fetch(`http://127.0.0.1:${port}/json/new?about:blank`, { method: 'PUT' });
-    if (!tabRes.ok) throw new Error(`Edge 新建标签失败（HTTP ${tabRes.status}）`);
+    if (!tabRes.ok) throw new Error(`浏览器新建标签失败（HTTP ${tabRes.status}）`);
     const tab = await tabRes.json();
     cdp = await Cdp.connect(tab.webSocketDebuggerUrl);
     await cdp.send('Page.enable');
@@ -392,7 +439,7 @@ export async function startQrLogin({ target = 'owner', expectedMid = '', expecte
     await cdp.send('Emulation.setDeviceMetricsOverride', { width: 560, height: 760, deviceScaleFactor: 1, mobile: false });
     await cdp.send('Page.navigate', { url: LOGIN_URL });
     const image = await waitForQrImage(cdp, QR_WAIT_MS);
-    if (!image) throw new Error('没等到二维码：B站 登录页可能被风控/改版，过一会儿重试或手动粘贴 cookie');
+    if (!image) throw new Error('没等到二维码：B站 登录页可能被风控/改版，过一会儿重试；也可以手动粘贴 cookie');
 
     const id = `qr_${crypto.randomUUID()}`;
     const session = {
@@ -416,7 +463,7 @@ export async function startQrLogin({ target = 'owner', expectedMid = '', expecte
     };
   } catch (error) {
     try { cdp?.close(); } catch {}
-    killEdge(edge);
+    killBrowser(edge);
     removeDir(profileDir);
     throw error;
   }

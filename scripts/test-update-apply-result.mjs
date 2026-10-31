@@ -44,8 +44,13 @@ function makeZip({ withManifest = true, extraMissing = [], corrupt = [] } = {}) 
     fs.writeFileSync(path.join(src, 'release', 'install-manifest.json'), JSON.stringify({ schemaVersion: 1, version: '0.7.0', files }));
   }
   const zip = path.join(base, 'pkg.zip');
-  execFileSync('powershell', ['-NoProfile', '-Command',
-    `Compress-Archive -Path '${src}' -DestinationPath '${zip}' -Force`], { windowsHide: true });
+  if (process.platform === 'win32') {
+    execFileSync('powershell', ['-NoProfile', '-Command',
+      `Compress-Archive -Path '${src}' -DestinationPath '${zip}' -Force`], { windowsHide: true });
+  } else {
+    // zip 归档保留顶层 surfcore-main/ 目录，和 Compress-Archive 的形状一致。
+    execFileSync('zip', ['-r', '-q', zip, 'surfcore-main'], { cwd: path.join(base, 'zip-src') });
+  }
   return fs.readFileSync(zip);
 }
 

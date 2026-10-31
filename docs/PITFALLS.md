@@ -5,6 +5,18 @@
 
 ---
 
+## #Linux-1 Windows-only 假设在 Linux 上会变成崩溃或静默失败（2026-11-01）
+
+**现象**：扫码登录报“找不到 Edge”；语音/更新在 Linux 失败；干净 clone 下 audit 73/108。
+
+**根因**：`findEdge` 只认 Windows 路径；`spawn('cmd'/'powershell'/'robocopy')` 无平台分支；无 `error` 监听的 spawn 在 ENOENT 时抛未捕获异常；`.bat` 在 Linux checkout 被 LF 化。
+
+**修法**：浏览器发现抽象成 `findBrowser()`；所有 Windows 命令加平台分支并给结构化错误（code+hint）；`.gitattributes` 强制 bat/cmd/ps1 CRLF；测试对 Windows-only 工具做平台跳过/替代。
+
+**验证**：`npm run test:audit` 108/108；Chromium 真机扫码预览通过。详见 `docs/cases/2026-11-01-linux-adaptation.md`。
+
+---
+
 ## #1（2026-10-22，P0）一个坏会话日志让整个 workspace 服务起不来
 
 **现象**

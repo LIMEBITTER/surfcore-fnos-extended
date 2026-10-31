@@ -11,6 +11,32 @@
 
 ## 待发布
 
+### 待发布 · 2026-11-01 · Linux（fnOS）适配
+<!-- release-batch: start=2026-11-01T02:40+08:00 end=2026-11-01T03:20+08:00 commits=fe6d756..e4d76ce -->
+
+**覆盖提交**：`e4d76ce`（范围 `fe6d756..e4d76ce`，另含随后的 case/清单提交）
+**建议**：patch 版本（Linux 单平台适配；Windows 分支已删除）
+**当前版本**：`0.8.4`，未 bump / 未 tag / 未 push
+
+**本轮范围**：
+
+1. 扫码登录跨平台：`SURFCORE_BROWSER`/Edge/Chrome/Chromium + headless 回退 + POSIX kill；
+2. 打开浏览器/SnowLuma 启动/语音包平台分支（非 Windows 结构化拒绝 + 可执行提示）；
+3. 更新解压/复制不再依赖 PowerShell/robocopy（unzip + 递归复制）；
+4. 测试适配（chcp/zip/config 回退）+ 新增 `test-linux-adaptation.mjs`；`.bat` 强制 CRLF。
+
+**case**：`docs/cases/2026-11-01-linux-adaptation.md`
+**验证**：`npm run test:audit` 108/108；真机 Chromium 扫码预览 2s 返回二维码；语音 stop 结构化拒绝；更新测试通过。
+
+**交接块（可直接转发发布会话）**：
+
+- 目标：Linux（fnOS）单平台适配（不再兼容 Windows）；版本号由发布会话定。
+- 必跑：`npm run test:audit`（108/108）、`node scripts/test-linux-adaptation.mjs`、`node scripts/release-manifest.mjs --verify-ref HEAD`（0 问题）。
+- 变更文件：bili-qr-login.mjs / index.js / voice-packs.js / updates.js / apply-update.mjs / 5 个测试与 .gitattributes。
+- 回滚：`git revert <batch commits>`；`.gitattributes` 回退后需重新 checkout 才恢复 LF。
+
+---
+
 ### 已发布 v0.8.0 · 2026-10-31 21:10 · 本轮全部优化
 <!-- release-batch: start=2026-10-31T16:25+08:00 end=2026-10-31T21:10+08:00 commits=a27a1e4..68dc2b7 -->
 

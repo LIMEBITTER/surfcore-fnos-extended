@@ -749,10 +749,10 @@ async function install(id, { force = false, mirror = '', jobs = 0 } = {}) {
           rec.phase = phase;
         });
         await flattenSingleDir(dir);
-        // GitHub archive 解压出来可能带只读属性，后面复制 config / 拉模型会写不进去。
+        // Linux-only：GitHub archive 解压出来可能带只读位，chmod 去掉（失败不影响安装）。
         try {
           await new Promise((resolve) => {
-            const c = spawn('cmd', ['/c', `attrib -R "${dir}\*" /S /D`], { windowsHide: true, stdio: 'ignore' });
+            const c = spawn('chmod', ['-R', 'u+rwX', dir], { stdio: 'ignore' });
             c.on('exit', resolve); c.on('error', resolve);
           });
         } catch {}
@@ -893,60 +893,12 @@ async function install(id, { force = false, mirror = '', jobs = 0 } = {}) {
     if (process.platform === 'win32' && !(await exists(path.join(dir, '.venv', 'Scripts', 'python.exe')))) {
       throw new Error('Python 环境还没装好：先点「卸载」再点「安装」重新装一次（会自动创建 .venv 并装依赖）');
     }
-    if (await probePort(m.port)) return { ok: true, already: true, port: m.port };
-
-    // 本地音色：先把 GPT-SoVITS(9880) 拉起来，否则入口起来了也只能 503。
-    let engineStarted = false;
-    if (m.engineScript && m.enginePort) {
-      const engineUp = await probePort(m.enginePort);
-      if (!engineUp) {
-        const engineScript = path.join(dir, m.engineScript);
-        if (await exists(engineScript)) {
-          const engineChild = spawn('cmd', ['/c', engineScript], { cwd: dir, detached: true, stdio: 'ignore', windowsHide: true });
-          engineChild.unref();
-          engineStarted = true;
-        }
-      }
-    }
-
-    const script = path.join(dir, m.startScript || 'run.bat');
-    if (!(await exists(script))) throw new Error(`包内缺少启动脚本：${m.startScript}`);
-    // stdio 必须给 stdin 一个空句柄：脚本里若还有 pause，'ignore' 会让它卡死不退。
-    // stderr 收进 rec.log，超时后杀进程树，避免留下僵尸。
-    const child = spawn('cmd', ['/c', script], {
-      cwd: dir,
-      detached: true,
-      stdio: ['ignore', 'ignore', 'pipe'],
-      windowsHide: true,
-    });
-    let startLog = '';
-    child.stderr?.on('data', (d) => { startLog = (startLog + String(d)).slice(-2000); });
-    child.unref();
-
-    // 最多等 60 秒（本地包要加载模型）
-    for (let i = 0; i < 60; i++) {
-      await new Promise((r) => setTimeout(r, 1000));
-      if (await probePort(m.port)) {
-        const engineUp = m.enginePort ? await probePort(m.enginePort) : null;
-        return {
-          ok: true, port: m.port, seconds: i + 1,
-          ...(m.enginePort ? { enginePort: m.enginePort, engineUp, engineStarted } : {}),
-          ...(m.enginePort && !engineUp ? { warning: m.engineWarmupHint } : {}),
-        };
-      }
-    }
-    // 超时：把这次拉起的进程树杀掉（cmd + python 子进程），别留占端口的僵尸。
-    try {
-      if (child.pid) {
-        await new Promise((resolve) => {
-          const k = spawn('taskkill', ['/PID', String(child.pid), '/T', '/F'], { windowsHide: true, stdio: 'ignore' });
-          k.on('exit', resolve); k.on('error', resolve);
-        });
-      }
-    } catch {}
+    // Linux-only：语音包启动脚本是 Windows 批处理，直接给出可照做的手动方案。
     return {
-      ok: false, port: m.port,
-      error: `启动超时（60 秒内端口没起来）${startLog ? `；脚本输出：${startLog.slice(-300)}` : ''}`,
+      ok: false,
+      code: 'PLATFORM_UNSUPPORTED',
+      error: '语音包的启动/停止脚本是 Windows 批处理，Linux 不能直接执行',
+      hint: 'Linux 用手动方式：cd state/voice-packs/<id> && python -m voxd --config config.toml；停止用 kill 或 systemd',
     };
   }
 
@@ -995,6 +947,14 @@ async function install(id, { force = false, mirror = '', jobs = 0 } = {}) {
   }
 
   async function stop(id) {
+    if (process.platform !== 'win32') {
+      return {
+        ok: false,
+        code: 'PLATFORM_UNSUPPORTED',
+        error: '语音包的启动/停止脚本是 Windows 批处理，Linux 不能直接执行',
+        hint: 'Linux 用手动方式：cd state/voice-packs/<id> && python -m voxd --config config.toml；停止用 kill 或 systemd',
+      };
+    }
     const m = manifests(cfg).find((x) => x.id === id);
     if (!m) throw new Error(`未知语音包：${id}`);
     const dir = packDir(cfg, id);

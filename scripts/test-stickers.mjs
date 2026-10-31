@@ -124,7 +124,10 @@ console.log('## sticker-lib 纯函数');
 
 console.log('## 配置文件');
 {
-  const cfg = JSON.parse(fs.readFileSync(path.join(ROOT, 'config.json'), 'utf8'));
+  // 公开仓库里没有运行期 config.json（被 .gitignore 排除）：本地开发没有时回退示例配置，
+  // 让回归在干净 clone/CI 上也能跑（示例里的开关与断言一致）。
+  const cfgFile = path.join(ROOT, 'config.json');
+  const cfg = JSON.parse(fs.readFileSync(fs.existsSync(cfgFile) ? cfgFile : path.join(ROOT, 'config.example.json'), 'utf8'));
   const tools = cfg.socialV2?.tools ?? {};
   ok(tools.listStickers === true, 'config listStickers=true');
   ok(tools.getStickerImage === true, 'config getStickerImage=true');

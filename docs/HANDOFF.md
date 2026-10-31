@@ -5,6 +5,15 @@
 
 ---
 
+## 快照：2026-11-01 03:20（Linux 适配分支）
+
+- **分支**：`feat/linux-adaptation`（基于 main `2ed572b`），未 push；
+- **package.json version**：`0.8.4`（未 bump）；
+- **验证**：`npm run test:audit` 108/108；真机 Chromium 156 扫码预览 2s 返回二维码（7882B）；
+- **环境**：飞牛 OS 已 `apt install chromium`（`/usr/bin/chromium`）；
+- **下一步（发布会话）**：重生成 `release/install-manifest.json` 并提交、推送分支、按 RELEASE.md 发布；
+- **未验证**：macOS、真实扫码确认、Linux 上完整应用更新、桌宠。
+
 ## 快照：2026-10-31 09:55（对齐 v0.7.22 + 人格分层）
 
 ### 当前事实
