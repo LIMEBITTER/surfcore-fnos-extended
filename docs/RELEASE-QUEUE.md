@@ -15,7 +15,7 @@
 <!-- release-batch: start=2026-11-01T02:40+08:00 end=2026-11-01T03:20+08:00 commits=fe6d756..e4d76ce -->
 
 **覆盖提交**：`e4d76ce`（范围 `fe6d756..e4d76ce`，另含随后的 case/清单提交）
-**建议**：patch 版本（Linux 适配，不改协议/默认行为）
+**建议**：patch 版本（Linux 单平台适配；Windows 分支已删除）
 **当前版本**：`0.8.4`，未 bump / 未 tag / 未 push
 
 **本轮范围**：
@@ -30,7 +30,7 @@
 
 **交接块（可直接转发发布会话）**：
 
-- 目标：Linux（fnOS）适配，不改变 Windows 行为；版本号由发布会话定。
+- 目标：Linux（fnOS）单平台适配（不再兼容 Windows）；版本号由发布会话定。
 - 必跑：`npm run test:audit`（108/108）、`node scripts/test-linux-adaptation.mjs`、`node scripts/release-manifest.mjs --verify-ref HEAD`（0 问题）。
 - 变更文件：bili-qr-login.mjs / index.js / voice-packs.js / updates.js / apply-update.mjs / 5 个测试与 .gitattributes。
 - 回滚：`git revert <batch commits>`；`.gitattributes` 回退后需重新 checkout 才恢复 LF。

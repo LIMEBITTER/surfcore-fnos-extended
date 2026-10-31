@@ -44,7 +44,10 @@
   - C：要求装 Edge for Linux（体积大、发行版未必有）。
 - **生效与重启**：扫码登录下一次点击即生效；语音/更新改动需重启 DSH（bridge 由插件拉起）；`.gitattributes` 需重新 checkout 才重写 CRLF。
 
-## 修法
+## 修法（Linux-only fork）
+
+> 本 fork 只保证 Linux；Windows 分支已删除，不再为 Windows 保留兼容层。
+
 
 - 扫码登录：`findBrowser()` 支持 `SURFCORE_BROWSER`（兼容 `SURFCORE_EDGE`）→ Windows Edge/Chrome → macOS /Applications → Linux PATH（chromium/chrome/edge/brave + `/snap/bin/chromium`）；`--headless=new` 失败回退 `--headless`；POSIX 用 `SIGKILL` 兜底；root/容器加 `--no-sandbox`、`--disable-dev-shm-usage`。
 - `index.js`：`openLocalUrl` 按平台（cmd / open / xdg-open）且 spawn 挂 `error`；SnowLuma 启动在非 Windows 返回 `PLATFORM_UNSUPPORTED` + Docker 提示；语音诊断提示按平台。
@@ -58,7 +61,8 @@
 - 真机扫码：`startQrLogin({ target: 'owner' })` 用 `/usr/bin/chromium` 2 秒返回 `data:image/png`（7882 字节），不扫码、不写凭据；`closeAllQrLogins()` 清理临时 profile。
 - 语音：Linux 下 `stop()` 返回 `PLATFORM_UNSUPPORTED` + hint；`start()` 在未安装/缺密钥时仍先报原来的业务错误。
 - 更新：`test-update-apply-result` 通过（zip 造包 + 递归复制分支）。
-- 未验证：macOS；真实 B站 扫码确认（需要人拿手机扫）；更新在 Linux 上的完整应用（只测了 helper）；桌宠（本就不在 Linux 范围）。
+- 未验证：真实 B站 扫码确认（需要人拿手机扫）；更新在 Linux 上的完整应用（只测了 helper）；桌宠（不在范围）。
+- 明确不支持：Windows / macOS（单平台 fork）。
 
 ## 遗留 / 后续
 

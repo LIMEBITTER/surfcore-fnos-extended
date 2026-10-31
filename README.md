@@ -1,5 +1,7 @@
 # SurfCore — 给 DSH agent 一个真实的身份：QQ × B站 × 桌宠
 
+> **Linux-only fork**：本仓库只面向 Linux（飞牛 OS / Debian 12）适配；Windows 专用分支已删除。
+
 **中文** | [English](README.en.md)
 
 > 🍴 **本仓库是 [LIMEBITTER/surfcore-linux](https://github.com/LIMEBITTER/surfcore-linux)，派生自 [Mieksido/surfcore](https://github.com/Mieksido/surfcore)；2026-11-01 已 Leave fork network，是独立仓库，与上游在 GitHub 上再无关联。**
