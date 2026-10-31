@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "version": "0.8.4",
   "source": "git:HEAD",
-  "generatedAt": "2026-10-31T18:45:50.646Z",
+  "generatedAt": "2026-10-31T18:46:57.851Z",
   "files": {
     ".gitignore": "df9b778e654706a89497277c5e725dddc5e9e0ab2675e5ff21cda9b7fae476c0",
     ".npmrc": "a093bb2fed59d699b7f9a62a5203cc196054c624e9c39c6d908c9e7db5dd2464",
@@ -158,7 +158,7 @@
     "plugins/surfcore/icon.svg": "a0e8b7b188ee9d8c59724380875c02d24d9109e081f399b650b6f471037229a1",
     "plugins/surfcore/lib/align.js": "4ec296f11e3d82cd74eb36c471b7f3f81a52d7b7d3d622e2f7c7a78c27917456",
     "plugins/surfcore/lib/automation.js": "4c40546af45a257496b4a9f97ca4316c9e52836f8609666e704c44ee4b5b2e74",
-    "plugins/surfcore/lib/bili-qr-login.mjs": "704365e9453523aab7a1389c800df493318952de8544ca9277dfeb5d96a7fcf3",
+    "plugins/surfcore/lib/bili-qr-login.mjs": "bbf7ffa8a942c165bab88f80a3d5e7a96e9b89beecbb222244a03f5c43620172",
     "plugins/surfcore/lib/billing.js": "0ae83db55c213fa7dc1208cd80bea4d1fac3e16b47b18c4eea4a097c18fcf819",
     "plugins/surfcore/lib/bridge.js": "854f7b471bac49b7dbac1a19d82a8cd2f4f844e4fc5b523be1ebb8c5858e6739",
     "plugins/surfcore/lib/characters.js": "25f0d20a51c92201bfe828d455268dc2e8228193726c27305a8bf9e7f1adde9b",
