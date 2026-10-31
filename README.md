@@ -429,18 +429,53 @@ node scripts/setup-dsh.mjs      # 重装 preset + MCP
 
 ### 11.3 同步上游
 
-```bash
-git remote add upstream https://github.com/Mieksido/surfcore.git   # 只需一次
-git fetch upstream
-git merge --ff-only upstream/main                                  # 本地 main 没有额外提交时是快进
+上游很活跃（2026-11-01 一天连发 0.8.1–0.8.4），而网页上的 **Sync fork** 按钮已随脱钩消失，
+同步只能在本地做；`upstream` 的 push 地址是 `no_push`，误推会直接报错。
+
+**一条命令**：`npm run sync:upstream`（= `node scripts/sync-upstream.mjs`）
+
+| 步骤 | 做什么 |
+| --- | --- |
+| 1 | 检查：在仓库里、当前分支是 `main`、工作区干净、没有未完成的合并 |
+| 2 | 确认 `upstream` 远端存在（缺了就加 `https://github.com/Mieksido/surfcore.git`），push 地址锁成 `no_push` |
+| 3 | 对齐 `origin/main`（云端定时同步可能已推过一版），落后就快进 |
+| 4 | `git fetch upstream --prune`，打印上游 HEAD 和「落后 N / 领先 M」 |
+| 5 | `git merge upstream/main`：生成合并提交、不重写 `main`；冲突就停下并列出冲突文件 |
+| 6 | `git push origin main`：只推自己的仓库 |
+
+参数：`--dry-run` 只看上游多了什么、不动工作区；`--no-push` 合并不推。
+退出码：`0` 成功或已最新、`1` 前置条件不满足、`2` 合并冲突（工作区保留冲突现场）。
+
+冲突时按脚本打印的四步走：改文件 → `git add` → `git commit --no-edit` → `git push origin main`；
+想放弃就 `git merge --abort`。
+
+**定期执行**（任务计划程序，跑在你自己的机器上）
+
+```powershell
+# 管理员 PowerShell；node 不在 PATH 就把 -Execute 换成 node.exe 的完整路径
+$repo = 'D:\path\to\surfcore'
+$action  = New-ScheduledTaskAction -Execute 'node' -Argument 'scripts\sync-upstream.mjs' -WorkingDirectory $repo
+$trigger = New-ScheduledTaskTrigger -Daily -At 12:00
+Register-ScheduledTask -TaskName 'surfcore-sync-upstream' -Action $action -Trigger $trigger
 ```
 
-> 已脱离 fork 网络，网页上的 **Sync fork** 按钮不会再出现——同步只有本地这一条路；
-> `upstream` 的 push 地址已设为 `no_push`，误推会直接报错。
->
-> `main` 上已经有本节这类提交时，`--ff-only` 会拒绝；改用
-> `git rebase upstream/main`（把 fork 提交挪到上游之上）或 `git merge upstream/main`（生成合并提交）。
-> **不要**为了"同步干净"丢掉 fork 自己的提交。
+> 也可以直接用任务计划程序 GUI：程序 `node`，参数 `scripts\sync-upstream.mjs`，起始于仓库目录。
+> 冲突那次任务会以非零退出码结束，日志里能看到 `exit code 2` 和冲突文件；解决完再跑一次即可。
+> **云端定时（已启用）**：`.github/workflows/sync-upstream.yml` 每天 UTC 04:00（北京时间 12:00）跑，
+> 也可以在仓库 Actions 页手动 *Run workflow*。它用仓库自带 `GITHUB_TOKEN` 推 `origin/main`，
+> 冲突时 job 失败并在 Summary 里列出冲突文件，处理方式和本地一样。
+> ⚠️ 仓库连续 60 天没活动时 GitHub 会自动停掉定时任务（会发邮件提醒），手动 Run 一次即可恢复。
+
+**手动等价命令**
+
+```bash
+git fetch upstream
+git merge upstream/main        # 本地 main 有提交，所以是合并而不是快进
+git push origin main
+```
+
+> **不要**为了"同步干净"把 `main` rebase 后强推：`main` 已经发布，历史要保留；`feat/*` 分支可以随便 rebase。
+> `--ff-only` 在这里永远不成立（`main` 一定领先上游），别用。
 
 ### 11.4 已知限制
 
