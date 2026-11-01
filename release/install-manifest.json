@@ -2,9 +2,8 @@
   "schemaVersion": 1,
   "version": "0.8.6-linux",
   "source": "git:HEAD",
-  "generatedAt": "2026-11-01T04:04:52.562Z",
+  "generatedAt": "2026-11-01T05:16:32.603Z",
   "files": {
-    ".github/workflows/sync-upstream.yml": "1b8f6cdc80e1e1ce414a5de8713cbccfc981217390bf3c1b49fff21d85d94a1d",
     ".gitignore": "df9b778e654706a89497277c5e725dddc5e9e0ab2675e5ff21cda9b7fae476c0",
     ".npmrc": "a093bb2fed59d699b7f9a62a5203cc196054c624e9c39c6d908c9e7db5dd2464",
     "AGENTS.md": "da84ca822e51e24df9d97a46d95fe70351d46554174906bf66124b0e824fb18b",
