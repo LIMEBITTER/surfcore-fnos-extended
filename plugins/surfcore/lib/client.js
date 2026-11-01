@@ -629,8 +629,10 @@ window.__ModuleLoader__.load({
       const openFolder = async () => {
         setBusy(true);
         try {
-          const r = await api("/owner-audit/open", { method: "POST", body: { action: "open" } });
-          toast?.(r.ok ? "✓ 已打开所在文件夹" : `✗ ${r.error || "打不开文件夹"}`);
+          const r = await api("/owner-audit", { method: "POST", body: { action: "open" } });
+          toast?.(r.ok
+            ? (r.opened === false ? `路径：${r.path}（当前系统不能自动打开）` : "✓ 已打开所在文件夹")
+            : `✗ ${r.error || "打不开文件夹"}`);
         } catch (e) { toast?.(`✗ ${e.message}`); }
         finally { setBusy(false); }
       };
@@ -4327,7 +4329,9 @@ F("socialV2.voice.ffmpegPath", "ffmpeg 路径", "留空走 PATH", "text", { wide
         try {
           const r = await api("/voice/packs/sample-open", { method: "POST", body: { id: "voice-cloud" } });
           if (!r.ok) throw new Error(r.error || "打开目录失败");
-          setMsg(`✓ 已打开：${r.path || r.dir || ""}`);
+          setMsg(r.opened === false
+            ? `路径：${r.path || r.dir || ""}（当前系统不能自动打开，已给出路径）`
+            : `✓ 已打开：${r.path || r.dir || ""}`);
         } catch (e) {
           setMsg(`打开目录失败：${e.message}`);
         } finally { setBusy(false); }
@@ -4537,7 +4541,10 @@ F("socialV2.voice.ffmpegPath", "ffmpeg 路径", "留空走 PATH", "text", { wide
       const openNetdisk = async () => {
         try {
           const r = await api("/voice/packs/netdisk", { method: "POST" });
-          if (r.ok) { if (toast) toast("✓ 已用浏览器打开网盘（提取码 sxUZ）"); return; }
+          if (r.ok) {
+            if (toast) toast(r.opened === false ? `请手动打开：${r.url}（提取码 sxUZ）` : "✓ 已用浏览器打开网盘（提取码 sxUZ）");
+            return;
+          }
           if (toast) toast(`✗ ${r.error || "打不开浏览器"}${r.hint ? `；${r.hint}` : ""}`);
         } catch (e) {
           if (toast) toast(`✗ ${e.message}`);

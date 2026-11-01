@@ -2126,7 +2126,7 @@ ${body}`;
       if (method !== 'POST') { json(res, 405, { ok: false, code: 'METHOD_NOT_ALLOWED', error: '只支持 POST' }); return; }
       const NETDISK_URL = 'https://pan.quark.cn/s/ec6cf2b123de?pwd=sxUZ';
       if (process.platform !== 'win32') {
-        json(res, 200, { ok: false, code: 'OPEN_URL_UNSUPPORTED', error: '当前系统不支持自动打开浏览器', hint: `手动打开：${NETDISK_URL}`, url: NETDISK_URL });
+        json(res, 200, { ok: true, opened: false, url: NETDISK_URL, hint: '当前系统不能自动打开浏览器，请手动打开这个链接' });
         return;
       }
       try {
@@ -2160,7 +2160,7 @@ ${body}`;
         }
         const file = path.join(dir, name);
         if (process.platform !== 'win32') {
-          json(res, 200, { ok: false, code: 'OPEN_FOLDER_UNSUPPORTED', error: '当前系统不支持自动打开目录', hint: `手动打开：${dir}` });
+          json(res, 200, { ok: true, opened: false, path: file, dir, hint: '当前系统不能自动打开文件管理器，路径已给出' });
           return;
         }
         execFile('explorer.exe', ['/select,', file], { windowsHide: true }, () => {});
@@ -3288,8 +3288,8 @@ if ($d.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { ${writeOut('$
       try { body = JSON.parse((await readBody(req)) || '{}'); } catch { json(res, 400, { ok: false, error: '请求体不是合法 JSON' }); return; }
       // 只支持「打开所在文件夹」；路径固定，不接受任何用户输入。
       if (body.action !== 'open') { json(res, 400, { ok: false, error: '未知 action' }); return; }
-      if (process.platform !== 'win32') { json(res, 200, { ok: false, error: '只有 Windows 支持打开文件夹' }); return; }
       const dir = path.join(QQBOT_ROOT, 'state');
+      if (process.platform !== 'win32') { json(res, 200, { ok: true, opened: false, path: dir, hint: '当前系统不能自动打开文件管理器，路径已给出' }); return; }
       try {
         spawn('explorer.exe', [dir], { detached: true, stdio: 'ignore', windowsHide: false }).unref();
         json(res, 200, { ok: true, path: dir });

@@ -30,6 +30,17 @@
 - `npm run test:audit` 109/109；
 - 未验证：真实浏览器点击（NAS 无头，需在 DSH 页面手动点一次）。
 
+## 顺手修复的同类入口
+
+- `owner-audit` 打开目录：客户端原来请求 `/owner-audit/open`（服务端没这个路由，永远"未知接口"）；
+  改为 `/owner-audit` + `{action:"open"}`；
+- Linux 下不再只报「只有 Windows 支持打开文件夹」：
+  - 主人审计目录返回 `{ok:true,opened:false,path}`；
+  - 语音参考音频目录返回 `{ok:true,opened:false,path,dir}`；
+  - 网盘入口返回 `{ok:true,opened:false,url}`，前端提示手动打开；
+- 验证：`POST /api/owner-audit {action:"open"}` → `ok:true, opened:false, path:/home/baiyu/surfcore/state`；
+  `POST /api/voice/packs/netdisk` → `ok:true, opened:false, url:...`。
+
 ## 影响面
 
 - 仅改变「浏览…」的交互路径；Windows 原生 PowerShell 代码保留，但本 fork 默认走 Web 选择器。
