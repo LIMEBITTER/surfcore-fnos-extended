@@ -1368,7 +1368,7 @@ F("sessionCwd", "会话工作目录", "留空用 surfcore 根目录", "text", { 
       { group: "倾听（别人找她）", fields: [
         F("listen.comment", "评论区监听", "", "switch"),
         F("listen.commentIntervalSec", "检查间隔（秒）", "建议 ≥300", "number", { min: 60 }),
-        F("listen.scope", "监听范围", "回复我的 / 回复+@", "select", { options: [["both", "回复 + @"], ["reply", "只回复我"]] }),
+        F("listen.scope", "监听范围", "「只回复我」= 不监听 @；别人 @ 小号请选「回复 + @」", "select", { options: [["both", "回复 + @"], ["reply", "只回复我（不含 @）"]] }),
         F("listen.oncePerPerson", "同一个人最多回一条", "30 天内只回一次", "switch"),
         F("listen.allDay", "全天监听", "关掉 = 只在她醒着的窗口里回", "switch"),
         F("listen.dm", "私信监听", "有私信就叫醒她", "switch"),

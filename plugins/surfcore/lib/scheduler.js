@@ -822,19 +822,26 @@ export function startScheduler(ctx, opts) {
     try {
       const cred = JSON.parse(fs.readFileSync(CRED_REF, 'utf8'))
       const H = makeHeaders(cred)
-      const since = Number(readL()?.lastSeen ?? 0)
+      // 保存设置会 invalidate 清空基线；如果下一次 tick 直接把"现在"当基线，
+      // 保存后立刻 @ 的那条会被当成历史吞掉。这里给 2 分钟宽限：首次/重置后
+      // 只回看最近 2 分钟，既不倒历史，也不漏掉刚发的测试消息。
+      const storedSince = Number(readL()?.lastSeen ?? 0)
+      const since = storedSince || (Math.floor(Date.now() / 1000) - 120)
       const items = []
       items.push(...(await pullFeed('reply', { headers: H, pages: 1 })).items)
       if (String(L.scope ?? 'both') !== 'reply') {
         try { items.push(...(await pullFeed('at', { headers: H, pages: 1 })).items) } catch {}
       }
-      // 第一次跑：只把"现在"当基线，不把历史回复全倒一遍 ✓
-      if (!since) { writeL({ lastSeen: Math.floor(Date.now() / 1000) }); listening = false; return }
+      // 第一次跑：只把"现在"当基线，不把历史回复全倒一遍 ✓（上面的 2 分钟宽限除外）
       const fresh = items.filter((x) => Number(x.t) > since && (!L.onlyOwner || String(x.mid) === String(cfg.owner?.mid ?? '')))
-      if (!fresh.length) { listening = false; return }
+      if (!fresh.length) {
+        if (!storedSince) writeL({ lastSeen: Math.floor(Date.now() / 1000) })
+        listening = false
+        return
+      }
       fresh.sort((a, b) => a.t - b.t)
       const who = fresh.map((x) => `${x.who}（${x.kind === 'at' ? '@' : '回复'}）`).join('、')
-      const L = limitsNow()
+      const limits = limitsNow()
       await ensureSession()
       await promptBili(
         {
@@ -849,20 +856,22 @@ export function startScheduler(ctx, opts) {
               `【有人找你】${fresh.length} 条新消息：${who}。`,
               '',
               '按 AGENTS.md 的「倾听」做（不要等我说话，直接做）：',
-              '1) `node bili.mjs comment-digest --hours 24` —— 把积压的**一起看**（合并策略 ✓ 不可关）',
+              '0) 多条一起到时**先回最新的一条**；同一 UP 10 分钟内只允许 1 条，其余等下一轮（别硬发 ✗）。',
+              '1) `node bili.mjs comment-digest --hours 24` —— 把积压的**一起看**（合并策略 ✓ 不可关；@ 条目现在也带坐标）',
               '2) 只回「一两句能答清的提问 + 轻互动」，一条收住；吵架/要隐私/长篇追问/代表主人承诺 → 不回 ✗',
               '2.5) ⭐ **疑似被攻击/阴阳怪气 → 不回，改 `attack add` 记待审**（带序号，自动私信报备给管理员；他晚上审完批准才回）',
               '     例：`attack add --oid … --root … --parent … --who "昵称" --text "他的原话" [--suggest "你想回的"]`；待审不占额度 ✓',
               '3) ⭐ **谁找你都直接回**（2026-10-20 用户改：不再走草稿 ✓）：',
               // mid 动态读配置 ✓（别把 uid 写死进代码 ✗ 开源版会带出去 ✗）
               `   · 对方是**主人**（mid ${cfg.owner?.mid ?? '（未配置）'}）→ 直接回 ✓，而且要比平时更温柔（先谢谢/回应关心，不抬杠、不回嘴）`,
-              `   · 对方是**其他人** → **也直接回** ✓（一样带 --auto 过闸，额度「回找我的人」${L.replyDaily} 条/天）`,
+              `   · 对方是**其他人** → **也直接回** ✓（一样带 --auto 过闸，额度「回找我的人」${limits.replyDaily} 条/天）`,
               '     `comment --oid … --root … --parent … --message "…" --auto --once-per-person（仅当开关=开 ✓） --dry` → `--go` → `thread` 复核 ✓',
               '     ⚠️ 别带 --ta —— 那是"我去搭热评"，两本账分开记 ✗',
-              `   · 如果那条评论在**我自己发的动态**底下 → 带 \`--type 17\`（新版转发动态）或 \`--type 11\`（图文）；工具会按 oid 自动记进「动态回复」账：每类 ${L.mineDaily} 条/天 · 每人 ${L.minePerPerson} 条 ✓`,
+              `   · 如果那条评论在**我自己发的动态**底下 → 带 \`--type 17\`（新版转发动态）或 \`--type 11\`（图文）；工具会按 oid 自动记进「动态回复」账：每类 ${limits.mineDaily} 条/天 · 每人 ${limits.minePerPerson} 条 ✓`,
               '     ⚠️ oid 必须用 comment-digest 打印的坐标（19 位动态 id 不能手抄：JS 数字会丢末几位）',
               '4) 吵架 / 要隐私 / 要你代表主人承诺 → 一条都不回 ✗（直接不理，别解释）',
               '5) 别贪多：这一批处理完就停 ✓（**只有设置页「同一个人最多只回一条」= 开时**才加 --once-per-person ✓；关掉就别加 ✗）',
+              '6) 被限额闸拒绝（同 UP 10 分钟 / 同视频 60 分钟 / 同一条 24 小时）时不要刷：记下目标，≥10 分钟后再回，优先处理最新的 @。',
             ].join('\n'),
           }],
         },

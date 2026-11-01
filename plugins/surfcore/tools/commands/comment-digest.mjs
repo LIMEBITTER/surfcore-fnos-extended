@@ -76,7 +76,15 @@ for (const x of all) {
   console.log(`· ${hhmm(real.ctime || x.t)} [${tag}] ${x.who}`)
   console.log(`    「${text}」`)
   if (x.uri) console.log(`    位置：${x.uri}`)
-  if (x.kind === 'reply') console.log(`    坐标：type=${x.business} oid=${x.oid} root=${x.root} parent=${real?.rpid || x.parent}`)
+  if (x.kind === 'reply') {
+    console.log(`    坐标：type=${x.business} oid=${x.oid} root=${x.root} parent=${real?.rpid || x.parent}`)
+  } else {
+    // @ 收件箱也要给坐标，否则监听叫醒后 agent 只知道"有人 @"，不知道回哪条。
+    // 视频 @：root=0 时回复该评论用 root=parent=评论 rpid；动态 @ 仍给 oid/parent 兜底。
+    const bvid = /\/video\/(BV[0-9A-Za-z]+)/.exec(String(x.uri || ''))?.[1] || ''
+    const root = x.root && x.root !== '0' ? x.root : x.parent
+    console.log(`    坐标：type=${x.business} oid=${x.oid}${bvid ? ` bvid=${bvid}` : ''} root=${root || '—'} parent=${x.parent || '—'}`)
+  }
 }
 
 const byWho = new Map()
