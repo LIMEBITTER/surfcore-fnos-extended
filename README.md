@@ -36,7 +36,7 @@
 
 ```bash
 # 1. 拉仓库
-git clone https://github.com/LIMEBITTER/surfcore-linux.git ~/surfcore
+git clone https://github.com/LIMEBITTER/surfcore-fnos-extended.git ~/surfcore
 cd ~/surfcore
 
 # 2. 装依赖（必须先装依赖，再用 setup 注册进 DSH）
