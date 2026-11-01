@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "version": "0.8.6-linux",
   "source": "git:HEAD",
-  "generatedAt": "2026-11-01T16:58:21.061Z",
+  "generatedAt": "2026-11-01T16:59:27.123Z",
   "files": {
     ".gitignore": "df9b778e654706a89497277c5e725dddc5e9e0ab2675e5ff21cda9b7fae476c0",
     ".npmrc": "a093bb2fed59d699b7f9a62a5203cc196054c624e9c39c6d908c9e7db5dd2464",
@@ -82,7 +82,7 @@
     "docs/cases/2026-11-01-linux-adaptation.md": "89f582dff70f16996595d2c19dfdb5faaf37158774a10f4932d4b48983b05dd0",
     "docs/cases/2026-11-01-qq-bili-comment-oid.md": "8aab2f2bb274c3f8efb1e1ec00573ce18862d5a8842c0917b8fbf30b1f045cd6",
     "docs/cases/2026-11-01-sync-upstream.md": "fbc2de1306bcd2cc4ccbcbad480d175ca975feb94ee18811c006f278cc2927d5",
-    "docs/cases/2026-11-02-comment-listen.md": "b022bf32e4122df4fe41af6355ae6db18677796da6a0dbc85c274d7b0242b1a0",
+    "docs/cases/2026-11-02-comment-listen.md": "8840f00650aa69043f98bf06e348c50792175b79ce74653ea9e00025bc6c7f7f",
     "docs/cases/2026-11-02-linux-path-picker.md": "beda00986343c799c7a51c809672e19ab777994e4eaf224c4e9fced06fdc1bc4",
     "docs/cases/README.md": "7c1cb986aa65a60179cae2579ae354286343ce1450bee801106da2aa187533e4",
     "docs/cases/_TEMPLATE.md": "f8b4d5fd6f08f8ccd7150bf8594f7b85d354878e8d66f7890d8c27cd4a172fcb",
