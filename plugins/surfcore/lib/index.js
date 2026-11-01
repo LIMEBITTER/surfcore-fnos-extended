@@ -2200,6 +2200,54 @@ ${body}`;
   // 路径不能走 PowerShell stdout：Windows PowerShell 5.1 重定向时用 OEM/GBK 编码，
   // Node 按 UTF-8 解码，中文目录会变成 `�`，后端 fsp.stat 直接 ENOENT（2026-10-29 反馈）。
   // 改成：PowerShell 把选中路径写进临时 UTF-8 文件，Node 读文件后删除；彻底绕开控制台编码。
+  // Linux / 远程 Web 没有原生文件对话框：给前端一个只读目录浏览接口，
+  // 让「浏览…」在浏览器里选路径（Windows 仍走下面的 PowerShell 原生框）。
+  async function handleBrowseList(req, res, url) {
+    if (req.method !== 'GET') { json(res, 405, { ok: false, error: '只支持 GET' }); return; }
+    const mode = url.searchParams.get('mode') === 'file' ? 'file' : 'dir';
+    const home = os.homedir();
+    let raw = String(url.searchParams.get('path') || '').trim();
+    if (raw === '~') raw = home;
+    else if (raw.startsWith('~/')) raw = path.join(home, raw.slice(2));
+    let dir = raw ? path.resolve(raw) : home;
+    try {
+      const st = await fs.promises.stat(dir);
+      if (st.isFile()) dir = path.dirname(dir);
+    } catch {
+      dir = home;
+    }
+    let dirents;
+    try {
+      dirents = await fs.promises.readdir(dir, { withFileTypes: true });
+    } catch (error) {
+      json(res, 200, {
+        ok: false, code: 'BROWSE_UNREADABLE', path: dir, home,
+        error: `目录不可读：${String(error?.message ?? error)}`,
+        hint: '换一个目录，或直接手动填绝对路径。',
+      });
+      return;
+    }
+    const entries = dirents
+      .map((d) => ({
+        name: d.name,
+        type: d.isDirectory() ? 'dir' : 'file',
+        path: path.join(dir, d.name),
+      }))
+      .filter((item) => mode === 'file' || item.type === 'dir')
+      .sort((a, b) => (a.type === b.type ? a.name.localeCompare(b.name, 'zh') : a.type === 'dir' ? -1 : 1))
+      .slice(0, 1000);
+    const parent = path.dirname(dir);
+    json(res, 200, {
+      ok: true,
+      platform: process.platform,
+      mode,
+      path: dir,
+      parent: parent === dir ? '' : parent,
+      home,
+      entries,
+    });
+  }
+
   async function handleBrowse(req, res, url) {
     const mode = url.searchParams.get('mode') === 'file' ? 'file' : 'dir';
     const title = url.searchParams.get('title') || (mode === 'file' ? '选择文件' : '选择目录');
@@ -3418,6 +3466,7 @@ if ($d.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { ${writeOut('$
     if (pathname.startsWith(`${API_PREFIX}/bili/`)) { await handleBili(req, res, url); return; }
     if (pathname === `${API_PREFIX}/logs`) { handleLogs(res, url); return; }
     if (pathname === `${API_PREFIX}/owner-audit`) { await handleOwnerAudit(req, res, url); return; }
+    if (pathname === `${API_PREFIX}/browse/list`) { await handleBrowseList(req, res, url); return; }
     if (pathname === `${API_PREFIX}/browse`) { await handleBrowse(req, res, url); return; }
     if (pathname === `${API_PREFIX}/privacy/explain`) {
       const body = req.method === 'POST' ? JSON.parse(await readBody(req) || '{}') : { text: url.searchParams.get('text') ?? '' };

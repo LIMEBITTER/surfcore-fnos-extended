@@ -6,6 +6,7 @@
 
 | 日期 | 案例 | 一句话 | 版本 |
 | --- | --- | --- | --- |
+| 2026-11-02 | [Linux 路径选择器](2026-11-02-linux-path-picker.md) | 「浏览…」在 Linux 报只有 Windows 支持；改为 Web 目录选择器 | 0.8.6-linux |
 | 2026-11-01 | [QQ B站 评论 usage: --oid](2026-11-01-qq-bili-comment-oid.md) | BV 号被大写导致 -404；评论补 --oid（recon 解析 aid） | 0.8.4-linux |
 | 2026-11-01 | [Linux（fnOS）适配](2026-11-01-linux-adaptation.md) | 扫码登录认 Chrome/Chromium；语音/更新/测试按平台分支；.bat CRLF | 待发布 |
 | 2026-11-01 | [脱离 fork 网络后定期同步上游](2026-11-01-sync-upstream.md) | 网页 Sync fork 消失；脚本 fetch→merge→push，upstream 只读 | 待发布 |

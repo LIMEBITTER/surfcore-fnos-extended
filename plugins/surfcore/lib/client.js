@@ -39,13 +39,77 @@ window.__ModuleLoader__.load({
       err ? h("div", { className: "qbw-err", style: { marginTop: "6px" } }, err) : null);
   }
 
+  // 「浏览…」的统一入口：Linux / 远程 Web 用页面内的路径选择器；
+  // 没有挂载选择器时（例如旧宿主/测试）才回退到宿主原生框。
+  let browseModalBridge = null;
   async function browseNative(mode = "dir", title = "", filter = "") {
-    // filter 只接受宿主认识的枚举（如 snowluma），不把原始 filter 串传给宿主。
+    if (browseModalBridge) {
+      return browseModalBridge({ mode: mode === "file" ? "file" : "dir", title, filter });
+    }
     const q = `mode=${mode === "file" ? "file" : "dir"}&title=${encodeURIComponent(title)}${filter ? `&filter=${encodeURIComponent(filter)}` : ""}`;
     const res = await fetch(`${API}/browse?${q}`, { headers: { accept: "application/json" }, signal: AbortSignal.timeout(180000) });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) return { ok: false, error: data?.error || `HTTP ${res.status}` };
     return data;
+  }
+
+  // 页面内路径选择器（Linux 没有原生文件对话框）。只做只读目录浏览；
+  // 选中后把绝对路径交回给调用方（Field / 安装弹窗）。
+  function PathPickerModal({ state, onClose }) {
+    const mode = state.mode === "file" ? "file" : "dir";
+    const [data, setData] = useState(null);
+    const [value, setValue] = useState("");
+    const [selected, setSelected] = useState("");
+    const [err, setErr] = useState("");
+    const [busy, setBusy] = useState(false);
+    const finish = (picked) => { state.resolve({ ok: true, path: picked }); onClose(); };
+    const cancel = () => { state.resolve({ ok: false, cancelled: true, error: "已取消" }); onClose(); };
+    const load = async (target = "") => {
+      setBusy(true); setErr("");
+      try {
+        const r = await fetch(`${API}/browse/list?mode=${mode}&path=${encodeURIComponent(target)}`, { headers: { accept: "application/json" } });
+        const d = await r.json().catch(() => ({}));
+        if (!r.ok || !d.ok) throw new Error(d.error || `HTTP ${r.status}`);
+        setData(d); setValue(d.path);
+        if (mode === "dir") setSelected(d.path);
+      } catch (e) { setErr(String(e.message || e)); } finally { setBusy(false); }
+    };
+    useEffect(() => { load(""); }, []);
+    const choose = () => {
+      if (mode === "file") { if (selected) finish(selected); return; }
+      if (data?.path) finish(data.path);
+    };
+    return h("div", { className: "qbw-modal-backdrop", onClick: (e) => { if (e.target === e.currentTarget) cancel(); } },
+      h("div", { className: "qbw-modal", style: { width: "min(720px,94vw)", maxHeight: "86vh", display: "flex", flexDirection: "column" } },
+        h("h3", null, state.title || (mode === "file" ? "选择文件" : "选择目录")),
+        h("p", null, "浏览的是 DSH 所在机器的文件系统（不是浏览器所在电脑）。也可以直接粘贴绝对路径。"),
+        h("div", { style: { display: "flex", gap: "6px", marginBottom: "8px" } },
+          h("input", { className: "qbw-input", style: { flex: 1 }, value, placeholder: "/home/... 或 /usr/bin/...",
+            onChange: (e) => setValue(e.target.value),
+            onKeyDown: (e) => { if (e.key === "Enter") load(value); } }),
+          h(Btn, { onClick: () => load(value), disabled: busy }, "转到")),
+        data ? h("div", { style: { display: "flex", gap: "6px", alignItems: "center", marginBottom: "6px", flexWrap: "wrap" } },
+          h(Btn, { kind: "qbw-btn2", onClick: () => load(data.parent || "/"), disabled: busy || !data.parent }, "上一级"),
+          h(Btn, { kind: "qbw-btn2", onClick: () => load(data.home), disabled: busy }, "主目录"),
+          h("span", { className: "qbw-hint", style: { wordBreak: "break-all" } }, data.path)) : null,
+        h("div", { style: { flex: 1, minHeight: "180px", maxHeight: "46vh", overflow: "auto", border: "1px solid rgba(127,127,127,.25)", borderRadius: "8px", padding: "4px" } },
+          busy ? h("div", { className: "qbw-hint", style: { padding: "8px" } }, "读取中…")
+            : data?.entries?.length
+              ? data.entries.map((ent) => h("button", {
+                  key: ent.path,
+                  onClick: () => { if (ent.type === "dir") load(ent.path); else setSelected(ent.path); },
+                  style: {
+                    display: "block", width: "100%", textAlign: "left", padding: "7px 9px", margin: "1px 0",
+                    border: "none", borderRadius: "6px", cursor: "pointer", color: "inherit",
+                    background: selected === ent.path ? "rgba(79,140,255,.18)" : "transparent",
+                    font: "inherit",
+                  },
+                }, `${ent.type === "dir" ? "📁" : "📄"} ${ent.name}`))
+              : h("div", { className: "qbw-hint", style: { padding: "8px" } }, data ? "这个目录下没有可选项" : "读取中…")),
+        err ? h("div", { className: "qbw-err", style: { marginTop: "8px" } }, err) : null,
+        h("div", { className: "qbw-actions" },
+          h(Btn, { kind: "qbw-btn2", onClick: cancel }, "取消"),
+          h(Btn, { onClick: choose, disabled: busy || (mode === "file" && !selected) }, mode === "file" ? "选择文件" : "选择当前目录"))));
   }
     const CSS_TAG = "surfcore/console.css";
 
@@ -5992,6 +6056,11 @@ F("socialV2.voice.ffmpegPath", "ffmpeg 路径", "留空走 PATH", "text", { wide
       const [tokenAlert, setTokenAlert] = useState(null);
       const [tokenAlerted, setTokenAlerted] = useState(null);
       const budgetRef = useRef(null);
+      const [pathPicker, setPathPicker] = useState(null);
+      useEffect(() => {
+        browseModalBridge = (opts) => new Promise((resolve) => setPathPicker({ ...opts, resolve }));
+        return () => { browseModalBridge = null; };
+      }, []);
 
       const notify = (message) => {
         setToastText(message);
@@ -6213,6 +6282,7 @@ F("socialV2.voice.ffmpegPath", "ffmpeg 路径", "留空走 PATH", "text", { wide
             h("div", { className: "qbw-actions" },
               h(Btn, { onClick: () => { setTab("tokens"); setTokenAlert(null); } }, "去调高额度"),
               h(Btn, { kind: "qbw-btn2", onClick: () => setTokenAlert(null) }, "知道了")))) : null,
+        pathPicker ? h(PathPickerModal, { state: pathPicker, onClose: () => setPathPicker(null) }) : null,
         memoryAlert ? h("div", { className: "qbw-modal-backdrop", onClick: (e) => { if (e.target === e.currentTarget) dismissMemoryAlert(false); } },
           h("div", { className: "qbw-modal" },
             h("h3", null, "🧠 记忆卡快满了"),
