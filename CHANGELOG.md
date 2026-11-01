@@ -4,6 +4,18 @@
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 发布规则见 [docs/guides/VERSIONS.md](docs/guides/VERSIONS.md)。
 
+## [0.8.5] - 2026-11-01
+
+### 修复（DSH 升级后 QQ 会话没有 qq_* 工具，只能收不能发）
+
+- 新增 `src/dsh-health.js`：扫描所有 profile 的 `cordis.patch.yml`，检测
+  `mcp-snowluma / mcp-snowluma-host / mcp-web-search-safe` 是否被升级摘掉；
+- 桥接 DSH 就绪后审计：profile 缺 MCP → **L2 `dsh-profile-mcp-missing`**
+  （建议 `node scripts/setup-dsh.mjs <profile>` + 完全重启 DSH）；
+- 审计已映射会话的真实 `agentPreset`：与当前配置不一致 → **自动退役重建**，
+  写 L1 `session-preset-rebuilt`（旧会话工具表在创建时定死，修 profile 也不会热加载）；
+- 只在“实际 preset 有值且不同”时重建，旧会话没记录 preset 不会误删。
+
 ## [0.8.4] - 2026-11-01
 
 ### 修复（点「保存全部」人格核心被清空/覆盖）
