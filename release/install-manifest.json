@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "version": "0.8.6-linux",
   "source": "git:HEAD",
-  "generatedAt": "2026-11-01T04:04:11.221Z",
+  "generatedAt": "2026-11-01T04:04:52.562Z",
   "files": {
     ".github/workflows/sync-upstream.yml": "1b8f6cdc80e1e1ce414a5de8713cbccfc981217390bf3c1b49fff21d85d94a1d",
     ".gitignore": "df9b778e654706a89497277c5e725dddc5e9e0ab2675e5ff21cda9b7fae476c0",
@@ -125,7 +125,7 @@
     "dsh/agent-presets/qq-chat/agent.cordis.yml": "5cc726ecda7c24e31243c3933e04849328b0a30687fa6a75f075dc71ef581227",
     "dsh/agent-presets/qq-chat/preset.yml": "864edef4886c851879a003a0407be34226bf4ddccc4e12e53f46fe68ca8ae5ea",
     "dsh/agent-presets/qq-chat/qq-tool-restrict.mjs": "231b31487014e757ecd8797e26746d58cbc2e33992da7e5ca901a14881fb52fe",
-    "package-lock.json": "23da9ee49eaf54147e25f372d938d733bf0f680b06246a5ede811ef67b4d40bb",
+    "package-lock.json": "7b0d59bf889489afcc83cfc4a2893c68f2be626d0c8bd17284f51c03ebb219d5",
     "package.json": "e3759f0ddc286db4db26be5381fb0f2d7cc36b84c3530564aa4bc689736338bf",
     "plugins/surfcore/README.md": "8b0677669e28e631b7e6a1879df5a8fac1a02f3e7f365f8655b4a75aa8e407af",
     "plugins/surfcore/cordis.patch.yml": "56e7a1620501155cb004c9dcd43f50b074bf2cd0742c607bfbbbeeaae47b1c0c",
