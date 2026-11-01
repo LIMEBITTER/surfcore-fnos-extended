@@ -6,6 +6,7 @@
 
 | 日期 | 案例 | 一句话 | 版本 |
 | --- | --- | --- | --- |
+| 2026-11-01 | [QQ B站 评论 usage: --oid](2026-11-01-qq-bili-comment-oid.md) | BV 号被大写导致 -404；评论补 --oid（recon 解析 aid） | 0.8.4-linux |
 | 2026-11-01 | [Linux（fnOS）适配](2026-11-01-linux-adaptation.md) | 扫码登录认 Chrome/Chromium；语音/更新/测试按平台分支；.bat CRLF | 待发布 |
 | 2026-11-01 | [脱离 fork 网络后定期同步上游](2026-11-01-sync-upstream.md) | 网页 Sync fork 消失；脚本 fetch→merge→push，upstream 只读 | 待发布 |
 | 2026-10-31 | [限制失败可见性](2026-10-31-limit-ux.md) | 频率/鱼群/Token 上限给出设置路径和错误报告 | 待发布 |

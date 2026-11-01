@@ -4137,6 +4137,37 @@ async function main() {
       });
     });
   }
+  // B站 评论 CLI 必须带 --oid（视频评论的 oid 是 aid）。QQ 工具只拿得到 BV 号，
+  // 这里用公开的 view 接口解析一次并缓存；解析失败要把原因带回给工具调用方。
+  const biliAidCache = new Map();
+  async function resolveBiliAid(bvid) {
+    const key = String(bvid).trim(); // BV 号大小写敏感，不能 toUpperCase（会把 BV1x... 弄成无效号）
+    if (biliAidCache.has(key)) return biliAidCache.get(key);
+    // 优先复用 B站 工具链的 recon（它已经处理了 UA/referer/风控，输出 aid(oid)）；
+    // 直接 fetch view API 在部分网络/风控下会返回 -404，不能作为唯一路径。
+    const recon = await runBiliCli(['recon', key], 30000);
+    const matched = /aid\(oid\):\s*(\d+)/.exec(recon.stdout ?? '');
+    if (matched) {
+      biliAidCache.set(key, matched[1]);
+      return matched[1];
+    }
+    const res = await fetch(`https://api.bilibili.com/x/web-interface/view?bvid=${encodeURIComponent(key)}`, {
+      headers: {
+        'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+        referer: `https://www.bilibili.com/video/${key}/`
+      },
+      signal: AbortSignal.timeout(8000)
+    });
+    const data = await res.json().catch(() => ({}));
+    const aid = data?.data?.aid;
+    if (!res.ok || data?.code !== 0 || !aid) {
+      throw new Error(`解析 BV 号失败：code=${data?.code ?? res.status} ${data?.message ?? ''}`
+        + `（recon ok=${recon.ok} out=${String(recon.stdout ?? '').slice(0, 120)} err=${String(recon.stderr ?? '').slice(0, 120)}）`);
+    }
+    biliAidCache.set(key, String(aid));
+    return String(aid);
+  }
+
   function biliManualEnabled() {
     try {
       const current = readJsonSafe(path.join(ROOT, 'config.json'), {});
@@ -4683,7 +4714,14 @@ async function main() {
               if (!/^BV[0-9A-Za-z]{8,12}$/.test(bvid)) { sendJson({ ok: false, error: '评论需要合法的 bvid' }, 400); return; }
               const root = String(body.root ?? '').trim();
               const parent = String(body.parent ?? '').trim();
-              args = ['comment', '--bvid', bvid, '--message', text, ...(root ? ['--root', root] : []), ...(parent ? ['--parent', parent] : []), dryRun ? '--dry' : '--go'];
+              let aid = '';
+              try {
+                aid = await resolveBiliAid(bvid);
+              } catch (error) {
+                sendJson({ ok: false, error: String(error?.message ?? error), code: 'BILI_AID_RESOLVE_FAILED' }, 400);
+                return;
+              }
+              args = ['comment', '--oid', aid, '--bvid', bvid, '--message', text, ...(root ? ['--root', root] : []), ...(parent ? ['--parent', parent] : []), dryRun ? '--dry' : '--go'];
             } else { sendJson({ ok: false, error: 'kind 只能是 dynamic / comment' }, 400); return; }
             if (!dryRun) {
               const limit = biliManualRateOk('post');
