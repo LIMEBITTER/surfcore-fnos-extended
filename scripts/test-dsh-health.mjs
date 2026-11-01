@@ -72,6 +72,10 @@ try {
   ok(bridge.includes('dsh-profile-mcp-missing'), '缺 MCP 要写 L2 事件');
   ok(bridge.includes('session-preset-rebuilt'), '重建会话要写事件');
   ok(bridge.includes('setup-dsh.mjs'), '建议里要给出 setup-dsh.mjs 这条下一步');
+  // 2026-11-01：QQ 会话里没有本地工具，模型跑不了 setup 脚本；建议必须写明“宿主机终端”。
+  ok(bridge.includes('宿主机终端'), '建议要说明在宿主机终端执行（模型没有本地工具）');
+  ok(bridge.includes('脚本本身不会重启 DSH'), '要说明 setup 脚本不会自动重启，避免用户以为会话被中断');
+  ok(bridge.includes('manualOnly: true'), '事件里标记 manualOnly，便于 UI/调用方区分');
 } finally {
   fs.rmSync(home, { recursive: true, force: true });
 }

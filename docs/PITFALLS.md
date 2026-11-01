@@ -3239,3 +3239,10 @@ ode scripts/setup-dsh.mjs desktop 恢复 bundle + 3 个 MCP 条目）。
 - **修法**（0.8.5）：src/dsh-health.js 扫 profile MCP，缺了写 L2 并给 setup-dsh.mjs；
   启动审计会话 agentPreset，不一致就重建（L1 列出 key）。
 - **教训**：会话创建后工具表定死；升级 DSH 后先查 profile MCP + 真实 preset，别只看本地映射。
+
+## 让 QQ 里的模型去跑 setup-dsh.mjs（它没有本地工具）
+
+- **现象**：模型被建议跑 `node scripts/setup-dsh.mjs`，但被桥接守卫以“ops_bash 不在 QQ 桥接白名单”拒绝。
+- **根因**：QQ 会话按设计没有本地工具；而且 setup 脚本只写 profile、不会重启 DSH。
+- **修法**（0.8.5）：L2 建议明确写“宿主机终端执行，模型跑不了；脚本不会重启 DSH；跑完完全退出重开”。
+- **教训**：给模型的建议先过“它有没有执行权限”这一关；没有就写给操作者。

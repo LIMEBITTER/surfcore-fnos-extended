@@ -4,6 +4,15 @@
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 发布规则见 [docs/guides/VERSIONS.md](docs/guides/VERSIONS.md)。
 
+## [0.8.6] - 2026-11-01
+
+### 修复（缺 MCP 的建议要写给操作者，不是写给模型）
+
+- L2 `dsh-profile-mcp-missing` 的建议改为：**在宿主机终端**运行 `node scripts/setup-dsh.mjs <profile>`
+  （QQ 会话里的模型没有本地工具权限，跑不了这条）；
+- 注明 `setup-dsh.mjs` **不会重启 DSH**，跑完需要完全退出并重开；旧会话可能还要在控制台重置；
+- 事件 evidence 增加 `manualOnly: true`，便于 UI/调用方区分“必须人工执行”。
+
 ## [0.8.5] - 2026-11-01
 
 ### 修复（DSH 升级后 QQ 会话没有 qq_* 工具，只能收不能发）

@@ -3813,10 +3813,10 @@ async function main() {
           level: 'L2',
           reason: { code: 'DSH_PROFILE_MCP_MISSING', message: `profile ${broken?.profile ?? '?'} 缺少 MCP：${(broken?.missing ?? []).join(', ')}` },
           impact: 'DSH 升级可能摘掉了 surfcore 的 MCP 注册：新会话拿不到 qq_* 工具，机器人收到消息也发不出来。',
-          recommendation: '运行 node scripts/setup-dsh.mjs <profile> 恢复 MCP 与 bundle，然后完全重启 DSH；旧会话可能仍需在控制台重置一次。',
+          recommendation: '请在**宿主机终端**运行 node scripts/setup-dsh.mjs <profile>（QQ 会话里的模型没有本地工具权限，跑不了这条）；脚本本身不会重启 DSH，跑完需完全退出并重开 DSH；旧会话可能仍需在控制台重置一次。',
           confidence: 'confirmed',
           dedupeKey: 'dsh-profile-mcp-missing',
-          evidence: { checked: check.checked, broken: check.broken.map((b) => b.profile) },
+          evidence: { manualOnly: true, checked: check.checked, broken: check.broken.map((b) => b.profile) },
         });
         log(`⚠️ DSH profile 缺 MCP（${broken?.profile ?? '?'}）：${(broken?.missing ?? []).join(', ')}；qq_* 工具可能不可用，请重跑 setup-dsh.mjs 并重启 DSH`);
       }
@@ -3843,7 +3843,7 @@ async function main() {
           level: 'L1',
           reason: { code: 'SESSION_PRESET_MISMATCH', message: `${rebuilt} 个会话的 preset 与当前配置不一致，已重建` },
           impact: '旧会话的工具表在创建时定死；重建后会按当前 preset 重新拉 qq_* 工具（上下文会重新开始）。',
-          recommendation: '无需操作；若仍没有 qq_* 工具，运行 setup-dsh.mjs 并重启 DSH。',
+          recommendation: '无需操作；若仍没有 qq_* 工具，请在宿主机终端运行 setup-dsh.mjs（QQ 内模型无法执行本地命令），再完全重启 DSH。',
           confidence: 'confirmed',
           dedupeKey: 'session-preset-rebuilt',
           evidence: { rebuilt, details: details.slice(0, 10) },
