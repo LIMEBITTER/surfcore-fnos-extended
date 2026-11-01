@@ -6,6 +6,7 @@
 
 | 日期 | 案例 | 一句话 | 版本 |
 | --- | --- | --- | --- |
+| 2026-11-02 | [插件全面排查](2026-11-02-plugin-audit.md) | 更新助手/跨午夜窗口/digest 未读/语音取消/路径选择器等 6 处修复 | 0.8.6-linux |
 | 2026-11-02 | [评论区监听不回复](2026-11-02-comment-listen.md) | TDZ 让监听永远失败；@ 范围/基线/digest 坐标/限流顺序一并修 | 0.8.6-linux |
 | 2026-11-02 | [Linux 路径选择器](2026-11-02-linux-path-picker.md) | 「浏览…」在 Linux 报只有 Windows 支持；改为 Web 目录选择器 | 0.8.6-linux |
 | 2026-11-01 | [QQ B站 评论 usage: --oid](2026-11-01-qq-bili-comment-oid.md) | BV 号被大写导致 -404；评论补 --oid（recon 解析 aid） | 0.8.4-linux |

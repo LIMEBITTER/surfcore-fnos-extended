@@ -3563,8 +3563,11 @@ if ($d.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { ${writeOut('$
       if (!v.enabled) return;
       const voxd = await portOpen(8765, 800);
       const gsv = await portOpen(9880, 800);
-      if (!voxd) pluginLog('[语音] 8765（voxd）没监听：发语音会失败，先跑 voice-local\run.bat');
-      else if (v.route === 'local' && !gsv) pluginLog(`[语音] 8765 在跑但 9880（GPT-SoVITS）没起：角色 ${v.character ?? '(空)'} 走本地音色会 503，先跑 voice-local\gsv.bat 等约 40 秒（也可切到 Piper/云端）`);
+      const startHint = process.platform === 'win32'
+        ? '先跑 voice-local\\run.bat'
+        : '先手动启动：cd voice-local && python -m voxd --config config.toml';
+      if (!voxd) pluginLog(`[语音] 8765（voxd）没监听：发语音会失败，${startHint}`);
+      else if (v.route === 'local' && !gsv) pluginLog(`[语音] 8765 在跑但 9880（GPT-SoVITS）没起：角色 ${v.character ?? '(空)'} 走本地音色会 503，${process.platform === 'win32' ? '先跑 voice-local\\gsv.bat 等约 40 秒' : '先启动 GPT-SoVITS 服务'}（也可切到 Piper/云端）`);
     } catch {}
   })();
 }

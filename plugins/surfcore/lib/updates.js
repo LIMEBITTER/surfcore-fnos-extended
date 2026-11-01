@@ -193,7 +193,9 @@ async function fetchCommitSha(repo) {
  */
 export function helperSpawnEnv(execPath = process.execPath, baseEnv = process.env) {
   const env = { ...baseEnv };
-  const base = path.basename(String(execPath || '')).toLowerCase();
+  // Windows 路径（C:\\nodejs\\node.exe）在 Linux 上 path.basename 不会拆反斜杠；
+  // 同时兼容两种分隔符，测试与跨平台调用都稳定。
+  const base = String(execPath || '').split(/[\\/]/).pop().toLowerCase();
   if (base !== 'node' && base !== 'node.exe') env.ELECTRON_RUN_AS_NODE = '1';
   return env;
 }

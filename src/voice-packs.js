@@ -909,10 +909,16 @@ async function install(id, { force = false, mirror = '', jobs = 0 } = {}) {
     rec.cancelled = true;
     try {
       if (rec.child?.pid) {
-        await new Promise((resolve) => {
-          const k = spawn('taskkill', ['/PID', String(rec.child.pid), '/T', '/F'], { windowsHide: true, stdio: 'ignore' });
-          k.on('exit', resolve); k.on('error', resolve);
-        });
+        if (process.platform === 'win32') {
+          await new Promise((resolve) => {
+            const k = spawn('taskkill', ['/PID', String(rec.child.pid), '/T', '/F'], { windowsHide: true, stdio: 'ignore' });
+            k.on('exit', resolve); k.on('error', resolve);
+          });
+        } else {
+          try { rec.child.kill('SIGKILL'); } catch {}
+          // 安装脚本可能再拉起子进程；按进程组补一刀（没有组就忽略）。
+          try { process.kill(-rec.child.pid, 'SIGKILL'); } catch {}
+        }
       }
     } catch {}
     rec.phase = '失败';

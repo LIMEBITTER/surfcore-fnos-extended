@@ -718,7 +718,8 @@ export function startScheduler(ctx, opts) {
       const [eh, em] = String(w.end ?? '').split(':').map(Number)
       const s = (sh === 24 ? 1440 : sh * 60) + (sm || 0)
       const e = (eh === 24 ? 1440 : eh * 60) + (em || 0)
-      return m >= s && m < e
+      // 支持跨午夜窗口（如 23:00–02:00）：start > end 时落在任一段都算。
+      return s <= e ? (m >= s && m < e) : (m >= s || m < e)
     })
   }
 

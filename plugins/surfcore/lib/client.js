@@ -71,7 +71,7 @@ window.__ModuleLoader__.load({
         const d = await r.json().catch(() => ({}));
         if (!r.ok || !d.ok) throw new Error(d.error || `HTTP ${r.status}`);
         setData(d); setValue(d.path);
-        if (mode === "dir") setSelected(d.path);
+        setSelected(mode === "dir" ? d.path : "");
       } catch (e) { setErr(String(e.message || e)); } finally { setBusy(false); }
     };
     useEffect(() => { load(""); }, []);

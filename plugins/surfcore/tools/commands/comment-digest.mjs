@@ -41,8 +41,8 @@ if (at.err) console.log(`（@收件箱读不到：${at.err}）`)
 
 let all = [...reply.items, ...at.items].filter((x) => x.t === 0 || x.t >= since)
 if (ONLY_UNREAD) {
-  const lv = Math.max(reply.lastView ?? 0, at.lastView ?? 0)
-  if (lv) all = all.filter((x) => x.t >= lv)
+  // 两个收件箱的 last_view_at 各自独立；不能用 max 把 @ 全过滤掉（at 的 lastView 实测为 0）。
+  all = all.filter((x) => x.t >= (x.kind === 'reply' ? (reply.lastView ?? 0) : (at.lastView ?? 0)))
 }
 all.sort((a, b) => a.t - b.t)
 
