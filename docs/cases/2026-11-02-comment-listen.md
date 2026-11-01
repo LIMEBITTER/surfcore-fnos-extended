@@ -41,7 +41,9 @@
 - `comment-digest --hours 2` 的 @ 条目已输出：
   `坐标：type=1 oid=363158669 bvid=BV1Q94y1s7PK root=322645746496 parent=322645746496`；
 - agent 已回复 `BV1S6xY65Eey` 的 @（rpid=322646937872）；
-- `BV1Q94y1s7PK` 因「同一 UP 10 分钟 1 条」被挡，等窗口过后补回（原话：在的。那期记忆链看完了，回在评论区啦。）。
+- `BV1Q94y1s7PK` 已在 00:58 补回：评论 `rpid=318922245649`（thread root=322645746496），
+  链接：https://www.bilibili.com/video/BV1Q94y1s7PK/#reply318922245649
+- 同批的另一条 @（BV1S6xY65Eey）也已回复：`rpid=322646937872`。
 
 ## 影响面
 
