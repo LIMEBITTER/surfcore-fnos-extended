@@ -47,6 +47,7 @@ import * as biliCard from '../src/bili-card.js';
 import * as historyCatchup from '../src/history-catchup.js';
 import * as purposeEngine from '../src/purpose-engine.js';
 import * as conversationClosure from '../src/conversation-closure.js';
+import * as timeContext from '../src/time-context.js';
 import { fetchVideoInfo } from '../src/bili-api.js';
 import * as stateAcl from '../src/state-acl.mjs';
 import { createBiliMemory } from '../src/bili-memory.js';
@@ -261,7 +262,7 @@ export async function bridgeHarness({ config = {}, savedState, files = {}, globa
     synthesizeToFile,
     ...tokenBudget,
     ...adminIdentity, ...roleCard, ...personaLayers, ...wakePolicy, ...groupPolicy, ...actionPlanner, ...sessionMap, ...contextTelemetry, ...memoryCard, ...biliCard, ...characterStore, ...historyCatchup,
-    ...questionAnswers, ...ownerAudit, ...turnGuard, ...gateEvents,
+    ...questionAnswers, ...ownerAudit, ...turnGuard, ...gateEvents, ...timeContext,
     ...purposeEngine,
     ...conversationClosure,
     // 角色系统在 fixture 里等价于「没有角色」：当前角色 null，记忆卡指向 temp/dsh/surfcore/memory。

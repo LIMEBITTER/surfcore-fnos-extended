@@ -47,6 +47,14 @@ QQ 私聊可直接让 agent 操作 B站（仅主人私聊，复用四本账额�
 - 动态发布：`--dry` 之前先过身份闸；发布成功后写四本账。
 - 评论：BV 号保留大小写 + 补 `--oid`，修复 `usage: --oid` 与 `-404`。
 
+### 时间与可靠性
+
+- 时钟注入在 prompt **末尾**（一行 `【钟】…`），避免每条消息的时间变化破坏前面静态 prompt 的缓存；
+- 有“几点/多久/还有/睡/今天/明天”等意图时，才追加“距下一个整点/半点”和写前检查（省 token）；
+- 发送前本地 `time-guard`：识别“还有 X 分钟到 H 点半”“现在 HH:MM”等表达，用服务器时间重算；
+  错的就地改写，历史/计划句跳过，校验异常 fail-open，不阻断消息；
+- 不做时间工具/二次模型/自动重试：零额外模型调用、零网络，适合高可用。
+
 ## 功能一览
 
 - QQ 群 / 私聊桥接（SnowLuma OneBot HTTP 3000 / WS 3001）
@@ -108,7 +116,7 @@ sudo apt install chromium            # B站 扫码登录前置
 ## 常用检查
 
 ```bash
-npm run test:audit                              # 全量回归（当前 109/109）
+npm run test:audit                              # 全量回归（当前 110/110）
 node scripts/release-manifest.mjs --verify-ref HEAD
 node scripts/setup-dsh.mjs nas                 # 重新注册到 DSH
 ```

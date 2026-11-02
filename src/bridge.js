@@ -21,6 +21,7 @@ import { mdToPlain, splitForQQ, truncateText, truncateTextTail } from './md-to-p
 import { SENSITIVE_RE } from './sensitive.js';
 import { looksLikeUnfinished } from './v2-wait.js';
 import { compactModelMessage } from './qq-model-view.js';
+import { formatClock, formatAnchors, needsTimeDetail, guardTimeClaims } from './time-context.js';
 import {
   historyWatermark, normalizeHistoryConfig,
   selectMissedHistory, summarizeHistoryCatchup,
@@ -2980,13 +2981,18 @@ async function main() {
 
   function withSlangContext(promptText) {
     const now = new Date();
-    const timeLine = `【当前时间】${now.toLocaleString('zh-CN', { hour12: false })}（${Intl.DateTimeFormat().resolvedOptions().timeZone}）`;
-    const parts = [timeLine];
+    const parts = [];
     if (cfg.slang?.enabled !== false) {
       const block = buildSlangContext(slangEntries, cfg.slang?.injectMax ?? 8);
       if (block) parts.push(block);
     }
-    return parts.join('\n\n') + '\n\n' + promptText;
+    // 时钟放在 prompt 末尾：既离生成最近，又不会让每条消息的时间变化
+    // 破坏前面大段静态内容的缓存前缀（token/延迟都更省）。
+    const detail = needsTimeDetail(promptText);
+    const timeTail = formatClock(now) + (detail
+      ? `\n${formatAnchors(now)}\n【写前检查】涉及“现在/还有多久/几点”必须按上面的钟算；算不出就写“快 X 了”，不要编分钟数。`
+      : '');
+    return [...parts, String(promptText), timeTail].filter(Boolean).join('\n\n');
   }
 
   // 身份对齐置顶：只对群聊注入（私聊不需要，也避免把群成员映射带进私聊）。
@@ -9133,7 +9139,12 @@ async function main() {
 
   function sendToQQ(key, msg) {
     const assertSendAllowed = captureSendGuard(key);
-    const safeMsg = redactKnownTokensOnly(msg);
+    // 出口时间校验：零模型调用、零网络；算错就地改写，解析失败 fail-open。
+    const timeChecked = guardTimeClaims(msg);
+    if (timeChecked.changed) {
+      log(`[time-guard] 已校正时间表达 ${JSON.stringify(timeChecked.corrections)} (${key})`);
+    }
+    const safeMsg = redactKnownTokensOnly(timeChecked.text);
     const [kind, id] = key.split(':');
     if (kind === 'group') recordFishWindow(key, '我', selfUserId, { isSelf: true });
     const parts = splitForQQ(safeMsg);
