@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "version": "0.8.6-linux",
   "source": "git:HEAD",
-  "generatedAt": "2026-11-02T16:13:54.635Z",
+  "generatedAt": "2026-11-02T16:28:19.137Z",
   "files": {
     ".gitignore": "df9b778e654706a89497277c5e725dddc5e9e0ab2675e5ff21cda9b7fae476c0",
     ".npmrc": "a093bb2fed59d699b7f9a62a5203cc196054c624e9c39c6d908c9e7db5dd2464",
@@ -10,7 +10,7 @@
     "CHANGELOG.md": "86d10b3d7daece4d3bf092570b4295b80d31a009a84402f4ffa49f0bb0324911",
     "LICENSE": "4f6e6af70a3c1cfc06ad3c9fe09abfb142d02d99abae28b0b22128b7a2d90e39",
     "README.en.md": "5ecb04327a81a16a117a578fcca640c0dbc920b17afcfd70f8db59a2cf3f7d62",
-    "README.md": "9124c54f8a986b322c025b136d631c4f1ca0b0a47108a150dddb8f5a87c81842",
+    "README.md": "dc0c9c3bc4b13f6c5a2910d217cf91e6dfdc417ab6b9fec6a21bca3c4a724025",
     "RULES.md": "36c465ad9d58c99176a93de25ae7af80eb5a77bc88a5866e49cfeb23cf3135a6",
     "_snowluma-catalog.json": "775cf10d4622644eeb0506dea7a30125423e6c70342a2fae2f1b0818d2441cd6",
     "config.example.json": "3e0cd017e243a6a6493e85673bf82ce579242a2aeee77aaf7519950017f99aa9",
