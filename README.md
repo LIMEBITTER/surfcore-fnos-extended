@@ -113,6 +113,27 @@ sudo apt install chromium            # B站 扫码登录前置
 
 本仓库**不含任何真实账号、群号、Cookie 或记忆数据**；运行时数据只在本机。
 
+## 成本与限额
+
+> 以下是**本机部署配置**，不属于仓库默认值；换机器或重装 DSH 后要重新设置。
+
+- **DSH 自动压缩**：`/home/baiyu/.dsh/profiles/nas/cordis.patch.yml`
+  ```yaml
+  - id: compaction-basic
+    config:
+      thresholdRatio: 0.35   # 约 36.7 万触发（窗口 1,048,576）
+      retainRatio: 0.1       # 保留约 10.5 万
+  ```
+  - QQ 会话约 20 万，低于阈值，**不会被压缩**；
+  - B站 长会话（34–58 万）会触发压缩，降低后台 token 成本；
+  - 改动前备份：`/home/baiyu/surfcore-patches/cordis.patch.yml.bak-*`。
+- **B站 回复限额**：`~/.dsh/surfcore/bili.config.json`
+  - `limits.replyDaily: 10`（回复总量/天）
+  - `listen.oncePerPerson: true`（同一人每天最多 1 条）
+  - `listen.dmScope: "owner"`（私信只叫醒主人）
+  - `dynamics` / `share` 不在此列，保持原设置。
+- **时间准确性**：时钟在 prompt 末尾注入，发送前有本地 `time-guard`；见 `docs/cases/2026-11-02-time-accuracy.md`。
+
 ## 常用检查
 
 ```bash
