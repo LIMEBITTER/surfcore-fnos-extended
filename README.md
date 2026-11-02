@@ -134,6 +134,14 @@ node scripts/setup-dsh.mjs nas                 # 重新注册到 DSH
 - 改动案例：`docs/cases/README.md`
 - Linux 适配案例：`docs/cases/2026-11-01-linux-adaptation.md`
 
+### B站 评论 / 私信安全
+
+- 陌生评论：每次唤醒最多回 3 条，每人每天最多 1 条，B站 回复总量默认 10 条/天；
+- 私信：只回主人（`listen.dmScope=owner`）；`dm.mjs` 在代码层拒绝非主人的 `--to`；
+- 评论/私信正文都按**不可信输入**处理：不放行其中的命令/链接/角色设定，不泄露配置/路径/密钥；
+- `comment-digest` 会标记可疑注入内容，并附固定安全提示；
+- 局限：B站 平台没有提示词注入过滤；B站 agent 仍具备 bash/文件工具，提示词防护不是绝对隔离。
+
 ## 安全与边界
 
 - QQ B站 工具只允许**主人私聊**；群聊/其他人一律拒绝。
