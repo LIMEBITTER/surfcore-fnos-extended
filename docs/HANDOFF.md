@@ -5,6 +5,33 @@
 
 ---
 
+## 快照：2026-11-03 23:20（同步上游 v0.8.8，Linux fork）
+
+### 当前事实
+
+- **分支**：`linux`；试合并工作树 `/home/baiyu/surfcore-sync-test`，merge commit `24ad533`（父 `2564008` + 上游 `0deb826`）；**生产 `/home/baiyu/surfcore` 尚未切换**（仍在 `2564008`）。
+- **版本**：`0.8.8-linux`（root / plugin / lock）；上游新增 v0.8.7、v0.8.8 两个 release commit，同步前本 fork 66 commits ahead。
+- **备份**：分支 `backup-before-upstream-v0.8.8-20261103-225514`（指向 `2564008`）；本机 Host 白名单补丁 `/home/baiyu/surfcore-patches/http-guard-pre-upstream-0.8.8.patch`（未提交）。
+- **测试**：`npm run test:audit` **144/145**（仅 `test-release-manifest`；重生成清单后应为 145/145）；`npm run test:regressions` 全过；`plugins/surfcore && npm test` 全过；`node scripts/test-version.mjs` 通过。
+- **文档**：README、`AGENTS.md` 的 fork 边界、`docs/cases/README.md` 与同步案例已修；本快照与发布队列已补；manifest 待重生成。
+
+### 本批范围
+
+- 同步上游 v0.8.7 / v0.8.8 全部代码：人格语气层、群刷屏过滤、B站 @ 楼层、QQ 晚注册工具限制、模型跟随、唤醒额度、outbox、语音/更新/记忆等。
+- 保留 fork 特性：`SURFCORE_BROWSER`、`xdg-open`、`PLATFORM_UNSUPPORTED`、`/browse/list`、`PathPickerModal`、`qq_bili_*`、`resolveBiliAid`、`guardTimeClaims`、Linux `unzip`/递归复制、`like.mjs`。
+- `plugins/surfcore/scripts/test-platform-start-host.mjs` 增加临时 `SURFCORE_QQBOT_ROOT`（关闭端口 39999），避免本机生产桥接在 3100 监听时测试误连；这是测试隔离，不改产品行为。
+
+### 下一步（按顺序）
+
+1. 提交 docs/test（case、HANDOFF、RELEASE-QUEUE）；
+2. `node scripts/release-manifest.mjs` 生成清单并提交；
+3. `npm run test:audit` 到 145/145，`node scripts/release-manifest.mjs --verify-ref HEAD` 通过；
+4. 推 `fork/linux`；
+5. 生产切到同步后的 `linux`，恢复 `http-guard-pre-upstream-0.8.8.patch`；
+6. 重启 DSH / QQ 桥接并验证插件版本、MCP、B站/QQ 健康。
+
+---
+
 ## 快照：2026-11-03 04:05（v0.8.7 正式发布）
 
 ### 当前事实

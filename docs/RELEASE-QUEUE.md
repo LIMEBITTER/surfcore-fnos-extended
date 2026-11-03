@@ -17,6 +17,45 @@
 > **2026-11-03 04:05：v0.8.7 已发布**，覆盖本表截至该时间的全部待发布批次（0.8.6 以来全部 dev，74 commits）。
 > 以下批次保留作追溯；后续新批次继续加在最上面。
 
+### 批次 2026-11-03 23:20 · 同步上游 v0.8.8（Linux fork）
+<!-- release-batch: start=2026-11-03T22:55+08:00 end=2026-11-03T23:20+08:00 commits=24ad533 -->
+
+**覆盖提交**：`24ad533`（merge；本批 docs/test/manifest 提交随 `linux` 分支）
+**建议**：**0.8.8-linux**（fork 统一使用 `-linux` 后缀）
+
+**改了什么**：
+- 同步上游 `Mieksido/surfcore` v0.8.7 + v0.8.8：人格语气层、群刷屏过滤、B站 @ 楼层、QQ 晚注册工具限制、模型跟随、唤醒额度、outbox、语音/更新/记忆等。
+- 保留 Linux/fork 特性：浏览器发现（`SURFCORE_BROWSER`）、`xdg-open`、`/browse/list`、`PathPickerModal`、`qq_bili_*`、`resolveBiliAid`、`guardTimeClaims`、Linux `unzip`/递归复制、`like.mjs`。
+- 版本统一 `0.8.8-linux`（root/plugin/lock）；README 平台改 Linux/fnOS、目标 DSH 改 rc.5；CHANGELOG 加 `[0.8.8-linux]`。
+- `AGENTS.md` 增加 fork 边界（只写本仓库、不回流上游、唯一 `linux`、冲突优先上游、编辑会话不发布）。
+- 恢复上游覆盖掉的 fork 案例索引；新增 `docs/cases/2026-11-03-upstream-sync-v0.8.8.md`。
+- `test-platform-start-host` 增加临时 `SURFCORE_QQBOT_ROOT`（关闭端口），避免本机生产桥接 3100 导致测试误连。
+
+**没做**：
+- 没有改上游功能行为；冲突处按用户要求优先上游。
+- 生产 `/home/baiyu/surfcore` 尚未切换，等清单/测试完成后再部署。
+- 本机 `plugins/surfcore/lib/http-guard.js` Host 白名单补丁仍未提交，部署时必须重新应用。
+
+**验证**：
+```text
+npm run test:audit          # 144/145，manifest 重生成后应为 145/145
+npm run test:regressions    # 全过
+cd plugins/surfcore && npm test  # 全过
+node scripts/test-version.mjs    # 通过（0.8.8-linux）
+node scripts/release-manifest.mjs --verify-ref HEAD  # 待重生成后跑
+```
+
+**重启**：重启 DSH / QQ 桥接；B站 调度器随 DSH 重载。
+
+**风险**：
+- 上游 v0.8.7 改动面大，QQ/B站运行时行为会跟随上游；fork 只保留 Linux 适配与手动 B站 工具。
+- 未在真实 QQ/B站 账号上逐项回归，部署后先看健康/日志。
+- manifest 和 Host 补丁顺序错误会导致 audit 失败或公网 Host 被拒。
+
+**case**：`docs/cases/2026-11-03-upstream-sync-v0.8.8.md`
+
+---
+
 ### 批次 2026-11-03 08:30 · 人格语气层去重
 <!-- release-batch: start=2026-11-03T08:20+08:00 end=2026-11-03T08:30+08:00 commits=2a473a3 -->
 

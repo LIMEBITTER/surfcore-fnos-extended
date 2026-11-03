@@ -25,6 +25,13 @@ fs.writeFileSync(path.join(stateDir, 'config.json'), `${JSON.stringify({
 
 process.env.DSH_HOME = tmp;
 process.env.USERPROFILE = tmp;
+// 隔离 bridge 探活：本机生产桥接可能正在 3100 监听；临时桥接根用关闭端口，
+// 避免这个「不启停真实桥接」的测试误连生产控制台。
+const bridgeRoot = path.join(tmp, 'bridge-root');
+fs.mkdirSync(path.join(bridgeRoot, 'src'), { recursive: true });
+fs.writeFileSync(path.join(bridgeRoot, 'config.json'), JSON.stringify({ consolePort: 39999 }), 'utf8');
+fs.writeFileSync(path.join(bridgeRoot, 'src', 'bridge.js'), '', 'utf8');
+process.env.SURFCORE_QQBOT_ROOT = bridgeRoot;
 process.env.SURFCORE_SKIP_AUTOSTART = '1';
 process.env.SURFCORE_DISABLE_CHARACTER_MIGRATION = '1';
 process.env.SURFCORE_DISABLE_MEMORY_TIMER = '1';

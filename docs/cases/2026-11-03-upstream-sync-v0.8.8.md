@@ -35,11 +35,15 @@
 - `docs/cases/README.md` 合并上游新行与 fork 的 7 条旧行；新增本案例索引。
 - `docs/HANDOFF.md` 增加同步快照；`docs/RELEASE-QUEUE.md` 增加待发布批次。
 - 合并后重生成 `release/install-manifest.json`，并恢复本机未提交的 `plugins/surfcore/lib/http-guard.js` 补丁。
+- `plugins/surfcore/scripts/test-platform-start-host.mjs`：临时 `DSH_HOME` 之外再加临时 `SURFCORE_QQBOT_ROOT`（`config.json` 的 `consolePort=39999` + 空 `src/bridge.js`），避免本机生产桥接在 3100 监听时测试误连；`stop-selected` 的 voice 项因此走「未运行」幂等分支，而不是触发 Linux `PLATFORM_UNSUPPORTED`。
 
 ## 验证
 
-- `npm run test:audit`、`npm run test:regressions`（待跑）。
-- `node scripts/release-manifest.mjs --verify-ref HEAD`（待跑）。
+- `npm run test:audit`：**144/145**，唯一失败 `test-release-manifest`；重生成清单后应为 **145/145**（待提交后复核）。
+- `npm run test:regressions`：全部通过。
+- `cd plugins/surfcore && npm test`：全部通过（含 `test-platform-start-host`；测试已隔离生产桥接）。
+- `node scripts/test-version.mjs`：通过，版本 `0.8.8-linux`。
+- `node scripts/release-manifest.mjs --verify-ref HEAD`：待清单重生成后跑。
 - 关键 fork 特性 grep（已做）：`SURFCORE_BROWSER`、`xdg-open`、`/browse/list`、`PathPickerModal`、
   `PLATFORM_UNSUPPORTED`、`guardTimeClaims`、`resolveBiliAid`、`qq_bili_`。
 
