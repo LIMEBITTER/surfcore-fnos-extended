@@ -1,5 +1,6 @@
 // 时间上下文/出口校验回归（固定时钟，不依赖真实模型、不发 QQ 消息）。
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import { formatClock, formatAnchors, guardTimeClaims, needsTimeDetail } from '../src/time-context.js';
 
 const at = (s) => new Date(s);
@@ -50,3 +51,13 @@ for (const input of ['', '还有……分钟就……', '现在 :']) {
 }
 
 console.log('✅ time-context: clock/anchors/guard 全部通过');
+
+
+// 回归：v0.8.8 合并时 bridge 丢了 time-context import，导致私聊在 withSlangContext 抛
+// ReferenceError，消息到桥接但不进 DSH。这里静态守住 import 不被再次覆盖掉。
+const bridgeSource = fs.readFileSync(new URL('../src/bridge.js', import.meta.url), 'utf8');
+assert.match(
+  bridgeSource,
+  /import\s*\{[^}]*\bformatClock\b[^}]*\bformatAnchors\b[^}]*\bneedsTimeDetail\b[^}]*\bguardTimeClaims\b[^}]*\}\s*from\s*['"]\.\/time-context\.js['"]/s,
+  'src/bridge.js 必须导入 time-context 的 formatClock/formatAnchors/needsTimeDetail/guardTimeClaims',
+);
