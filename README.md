@@ -7,14 +7,11 @@
 
 | 项 | 值 |
 | --- | --- |
-| 版本 | `0.8.6-linux` |
-| 基线 | 上游 `v0.8.6` |
-| 平台 | **Linux x86_64**（飞牛 OS / Debian 12 实测） |
-| DSH | `0.2.1-rc.2+`（rc.5 实测） |
-| Node | `>= 22.13` |
-| SnowLuma | 第三方，Docker 部署（实测 2.2.1） |
-| 许可 | MIT（SnowLuma 为第三方专有运行时，不随本仓库分发） |
-| 上游 | [Mieksido/surfcore](https://github.com/Mieksido/surfcore) |
+| 版本 | `0.8.8-linux` |
+| 目标 DSH | `0.2.1-rc.5`（rc.5 已实测；`npm run verify:adaptation` 可逐项复核） |
+| 平台 | Linux / 飞牛 OS（Windows 兼容层已移除） |
+| 许可 | MIT（SnowLuma 是第三方专有运行时，**不随本仓库分发**） |
+| 配套仓库 | [surfvoicelocal](https://github.com/Mieksido/surfvoicelocal) · [surfvoicecloud](https://github.com/Mieksido/surfvoicecloud) · [surfpet](https://github.com/Mieksido/surfpet) |
 
 ## 这个分支改了什么
 
