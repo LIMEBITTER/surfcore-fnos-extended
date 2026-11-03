@@ -39,11 +39,12 @@
 
 ## 验证
 
-- `npm run test:audit`：**144/145**，唯一失败 `test-release-manifest`；重生成清单后应为 **145/145**（待提交后复核）。
+- `npm run test:audit`：**145/145**；`test-release-manifest` 已随最终清单通过。
 - `npm run test:regressions`：全部通过。
 - `cd plugins/surfcore && npm test`：全部通过（含 `test-platform-start-host`；测试已隔离生产桥接）。
 - `node scripts/test-version.mjs`：通过，版本 `0.8.8-linux`。
-- `node scripts/release-manifest.mjs --verify-ref HEAD`：待清单重生成后跑。
+- `node scripts/release-manifest.mjs --verify-ref HEAD`：**694/0**（跟踪 694、问题 0）。
+- 已推送 `fork/linux`：`ef92dee`（远端 `refs/heads/linux`）。
 - 关键 fork 特性 grep（已做）：`SURFCORE_BROWSER`、`xdg-open`、`/browse/list`、`PathPickerModal`、
   `PLATFORM_UNSUPPORTED`、`guardTimeClaims`、`resolveBiliAid`、`qq_bili_`。
 

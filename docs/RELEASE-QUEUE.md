@@ -20,7 +20,7 @@
 ### 批次 2026-11-03 23:20 · 同步上游 v0.8.8（Linux fork）
 <!-- release-batch: start=2026-11-03T22:55+08:00 end=2026-11-03T23:20+08:00 commits=24ad533 -->
 
-**覆盖提交**：`24ad533`（merge；本批 docs/test/manifest 提交随 `linux` 分支）
+**覆盖提交**：`24ad533`（merge；docs/test `ef2065f`，manifest `ef92dee`，远端 `fork/linux` 已推送 `ef92dee`）
 **建议**：**0.8.8-linux**（fork 统一使用 `-linux` 后缀）
 
 **改了什么**：
@@ -33,16 +33,16 @@
 
 **没做**：
 - 没有改上游功能行为；冲突处按用户要求优先上游。
-- 生产 `/home/baiyu/surfcore` 尚未切换，等清单/测试完成后再部署。
+- 生产 `/home/baiyu/surfcore` 尚未切换；仓库同步、清单、测试已完成，部署待执行。
 - 本机 `plugins/surfcore/lib/http-guard.js` Host 白名单补丁仍未提交，部署时必须重新应用。
 
 **验证**：
 ```text
-npm run test:audit          # 144/145，manifest 重生成后应为 145/145
+npm run test:audit          # 145/145
 npm run test:regressions    # 全过
 cd plugins/surfcore && npm test  # 全过
 node scripts/test-version.mjs    # 通过（0.8.8-linux）
-node scripts/release-manifest.mjs --verify-ref HEAD  # 待重生成后跑
+node scripts/release-manifest.mjs --verify-ref HEAD  # 694/0
 ```
 
 **重启**：重启 DSH / QQ 桥接；B站 调度器随 DSH 重载。
