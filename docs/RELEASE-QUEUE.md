@@ -14,6 +14,35 @@
 
 ## 待发布
 
+### 批次 2026-11-03 23:55 · 修复 QQ 私聊时间上下文丢失
+<!-- release-batch: start=2026-11-03T23:49+08:00 end=2026-11-03T23:55+08:00 commits=687543f -->
+
+**覆盖提交**：`687543f`
+**建议**：**0.8.8-linux（hotfix）**
+
+**改了什么**：
+- `src/bridge.js` 补回 `time-context.js` 的 `formatClock/formatAnchors/needsTimeDetail/guardTimeClaims` import。
+- `scripts/test-time-context.mjs` 增加静态回归，防止后续合并再次覆盖。
+- 新增 case：`docs/cases/2026-11-03-qq-time-context-import.md`。
+
+**没做**：
+- 不自动补发用户修复前那条「晚安」；需要用户重发验证。
+- 没有改上游时间上下文实现，只恢复 fork 的接线。
+
+**验证**：
+```text
+node --check src/bridge.js
+node scripts/test-time-context.mjs
+npm run test:audit          # 145/145
+node scripts/release-manifest.mjs --verify-ref HEAD
+```
+
+**重启**：`sudo systemctl restart dsh`（bridge 随 DSH 重启）。
+
+**风险**：低；只恢复缺失 import。若 manifest 未同步，audit 的 release-manifest 会失败。
+
+**case**：`docs/cases/2026-11-03-qq-time-context-import.md`
+
 > **2026-11-03 04:05：v0.8.7 已发布**，覆盖本表截至该时间的全部待发布批次（0.8.6 以来全部 dev，74 commits）。
 > 以下批次保留作追溯；后续新批次继续加在最上面。
 
