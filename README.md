@@ -4,6 +4,7 @@
 
 这是 [Mieksido/surfcore](https://github.com/Mieksido/surfcore) 的 Linux 分支，独立维护，不向上游回流。
 上游负责“人格/记忆/QQ 桥接”的通用能力；这个仓库负责让它在 **飞牛 OS** 上真正跑起来，并把 B站 接进 QQ 私聊。
+本分支仓库仅为自用，紧跟上游仓库commit，如有问题，请向**上游仓库**提交issue。
 
 | 项 | 值 |
 | --- | --- |
