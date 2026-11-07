@@ -1967,6 +1967,14 @@ ${body}`;
       // 语音链路：只报端口状态 + 一句怎么补（2026-10-27 用户踩过"只起了 8765 就以为装好了"）
       try {
         const v = readUnified().config?.socialV2?.voice?.tts ?? {};
+        // 语音默认是关的：没启用时这三个端口本来就不该在听，别在诊断页报红。
+        if (v.enabled !== true) {
+          install.push({
+            name: '语音包', level: 'ok', ok: true,
+            detail: '未启用（可选）：启用后要手动起 voxd（8765/8767），本地音色还要 GPT-SoVITS（9880）',
+            fix: '',
+          });
+        } else
         for (const item of VOICE_PORTS) {
           const open = await portOpen(item.port, 800);
           const hint = item.key === 'voxd'
