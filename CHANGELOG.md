@@ -10,6 +10,10 @@
 - 网盘资源入口采用上游统一弹窗；补齐 Linux `/resources/open` 的 `xdg-open` 支持，保留复制链接兜底。
 - `release/install-manifest.json` 在合并提交后重新生成。
 
+### 修复
+
+- 修复 embedding pack quarantine 目录同毫秒冲突：覆盖备份后立即卸载会因 `rename` 目标已存在而失败；目标冲突时追加 `-2`、`-3` 后缀，不覆盖已有备份（#23）。
+
 ## [0.8.9] - 2026-11-07
 
 ### 向量记忆

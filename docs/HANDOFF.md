@@ -5,16 +5,17 @@
 
 ---
 
-## 快照：2026-11-07 14:40（合并上游 v0.8.9，Linux fork）
+## 快照：2026-11-07 15:10（合并上游 v0.8.9，Linux fork）
 
 ### 当前事实
 
 - **分支**：`linux`；合并基线 `fork/linux` @ `b14afb2`，上游稳定版 `v0.8.9` @ `0ce8580`。
-- **状态**：`git merge --no-ff v0.8.9` 进行中；10 个冲突文件已按“保留 fork 特性 + 接受上游新能力”解决，**尚未提交 merge**。
+- **状态**：merge 已提交 `12d5757`；修复 commit `d4e3c96`（`src/embedding-packs.js` quarantine 同毫秒冲突）；已推送 `fork/linux`。工作区仅剩未跟踪 `roles/鲸鲸巡逻中.md`。
 - **合并前补丁已提交**：`d6a02d8`（`http-guard.js` Host 白名单、`scheduler.js` 监听 cause 链/健康文件/退避）、`9c2d463`（B站游戏名全角冒号、`dynamic.mjs` 的 `record` 导入）。
 - **备份/回滚**：`/home/baiyu/surfcore-merge-backups/{worktree-20261107-142924.patch,repo-20261107-142924.bundle,untracked-20261107-142924.tar.zst}`；回滚分支 `pre-v0.8.9-merge-20261107` @ `8285785`。
-- **版本**：`0.8.9-linux`（root / plugin / lock）；README 仍为 Linux / DSH `0.2.1-rc.5`，不采用上游的 Windows 定位。
-- **验证**：合并提交后跑 `npm run test:audit`、`npm run test:regressions`、`plugins/surfcore && npm test`、`node scripts/release-manifest.mjs --verify-ref HEAD`；结果补到本快照。
+- **版本**：`0.8.9-linux`（root / plugin / lock / manifest）；README 仍为 Linux / DSH `0.2.1-rc.5`，不采用上游的 Windows 定位。
+- **测试**：`npm run test:audit` 155/155；`npm run test:regressions` 全部通过；`plugins/surfcore && npm test` 通过；`node scripts/release-manifest.mjs --verify-ref HEAD` 768/0。
+- **Issue**：[#23](https://github.com/LIMEBITTER/surfcore-fnos-extended/issues/23)（quarantine 同毫秒冲突，已修复）。
 
 ### 本批合并范围
 
@@ -22,13 +23,11 @@
 - 保留 fork：`SURFCORE_BROWSER`、`xdg-open`、`PLATFORM_UNSUPPORTED`、`/browse/list`、`PathPickerModal`、`qq_bili_*`、`resolveBiliAid`、`guardTimeClaims`、Linux 解压/递归复制更新、`like.mjs`。
 - 网盘入口采用上游统一弹窗，并在 `openExternalResourceUrl` 补 Linux `xdg-open`；复制链接兜底保留。
 
-### 下一步（按顺序）
+### 下一步
 
-1. `git add` 全部冲突文件，提交 merge；
-2. 重新生成 `release/install-manifest.json` 并 amend 进 merge commit；
-3. 跑上述四组测试，修到全绿；
-4. 推送 `fork linux`（**不推 upstream、不提 PR**）；
-5. 在 fork 仓库登记本次发现的 bug/feat issue。
+1. 本轮只做代码合并与推送，**未部署、未重启 DSH**；部署时先重启 DSH 加载新插件。
+2. 部署后重点验证：向量记忆索引/检索、会话滚动、QQ 私聊收发、B站 监听、网盘资源打开。
+3. 观察 24 小时，确认没有新的监听/会话回归；必要时用 `pre-v0.8.9-merge-20261107` 回滚。
 
 ---
 
