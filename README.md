@@ -10,7 +10,7 @@
 
 | 项 | 值 |
 | --- | --- |
-| 版本 | `0.8.8-linux` |
+| 版本 | `0.8.9-linux` |
 | 目标 DSH | `0.2.1-rc.5`（rc.5 已实测；`npm run verify:adaptation` 可逐项复核） |
 | 平台 | Linux / 飞牛 OS（Windows 兼容层已移除） |
 | 许可 | MIT（SnowLuma 是第三方专有运行时，**不随本仓库分发**） |

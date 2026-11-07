@@ -1,3 +1,138 @@
+## [0.8.9-linux] - 2026-11-07
+
+### 上游同步
+
+- 合并 `Mieksido/surfcore` v0.8.9：向量记忆（本地 runtime / 云端 embedding / 多模型索引 / 只读记忆库）、会话滚动、token ledger、wake filter/batch、SnowLuma 启动、更新锁与发布清单校验。
+- 保留本 fork 的 Linux / fnOS 适配：`SURFCORE_BROWSER`、`xdg-open`、`PLATFORM_UNSUPPORTED`、`/browse/list`、`PathPickerModal`、Linux 解压/递归复制更新、扫码登录浏览器发现。
+- 保留 QQ/B站手动工具、`resolveBiliAid`、`guardTimeClaims`、`like.mjs`。
+- 保留本机补丁：`http-guard.js` 的 `SURFCORE_TRUSTED_HOSTS` 精确 Host 白名单；B站监听 cause 链/健康文件/退避；游戏名全角冒号匹配与 dynamic 记录导入。
+- 版本统一为 `0.8.9-linux`；README 平台仍为 Linux，目标 DSH 仍为 `0.2.1-rc.5`。
+- 网盘资源入口采用上游统一弹窗；补齐 Linux `/resources/open` 的 `xdg-open` 支持，保留复制链接兜底。
+- `release/install-manifest.json` 在合并提交后重新生成。
+
+## [0.8.9] - 2026-11-07
+
+### 向量记忆
+
+- 新增本地向量记忆完整链路：可选 runtime 包 + bge-small / qwen3 / bge-m3 三个本地模型，runtime 自带 Ollama CPU，不要求系统预装 Ollama。
+- 新增 SiliconFlow、智谱、阿里百炼、OpenAI 四家云端 embedding，配置独立保存、Key 脱敏、维度自动识别。
+- 多模型使用独立索引空间，切换模型不需要复制记忆或整库重建；支持自动补索引、多模型批量重建。
+- 新增只读「向量记忆库」：最近记录 + 语义搜索；B站读取也接入向量记忆。
+- 一键启动可勾选向量记忆，本地/云端模型可选；runtime 自检不过不会切换记忆方式。
+
+### 上下文与省钱
+
+- 会话滚动改为看「当前这一轮上下文」，不再看累计账单；旧字段 `rolloverTokens: 80000` 不再误触发。
+- 会话滚动默认关闭；用户手动开启时弹窗说明上下文重置、可能遗忘前文、缓存重建等后果。
+- 开启后默认阈值：当前上下文 50 万 token；省钱/均衡/活跃预设分别 20/50/80 万。
+- 保留会话滚动 P0 修复：到阈值只在下一轮投递前换会话，当前轮回复不会因 token 轮换丢失。
+- 会话滚动计数、交接块、pending 状态跨重启持久化；更新锁增加 ABA 防护。
+- 花费页、额度入口、成本标签、每会话额度、峰时顺延、云端 embedding 账本继续完善。
+
+### SnowLuma 与一键启动
+
+- SnowLuma 改用 explorer + VBS 隐藏启动，脱离 DSH Job，DSH 更新不再连带杀掉网关。
+- 新增「关闭 SnowLuma」按钮；WebUI 端口读取 `config/runtime.json`，兼容 5099。
+- 一键启动支持隐藏命令行黑框、SnowLuma 账号弹窗、启动卡片置顶；语音/Embedding 改直连 node/pythonw，减少黑框。
+- 「重启 QQ 桥接」收进高级设置。
+
+### 更新与发布
+
+- 更新进度显示已下载大小/百分比；GitHub 归档没有总大小时明确标注“总大小未知”。
+- 更新 busy 返回结构化原因并 10 分钟自愈；新增 `applyGeneration`，旧任务不能清掉新任务锁。
+- `release-manifest --verify` 改为读被校验目录自己的清单，缺清单直接拒绝；新增改坏一个字节必须报错的测试。
+
+### UI 与资源
+
+- 记忆页拆公用设置 + 叙事/向量 Tab；人格页支持整卡/拆分/runtime 调整。
+- 向量记忆使用说明按钮加红色「必看」提示，安装顺序上方明确要求先导入 runtime，并补充 runtime 大白话解释。
+- 网盘资源弹窗修复打不开：夸克/迅雷/UC/百度各一行「打开 + 复制链接」；Windows 宿主用默认浏览器打开，复制链接作为兜底。
+
+### 修复
+
+- 桥接先监听再收紧 state ACL，启动等待放宽到 30 秒，语音/向量状态不再误报“未安装”。
+- Embedding 子进程补 PATH/node 入口；启动失败带 service.log。
+- 修复 SnowLuma WebUI 端口、账号弹窗错误文案、黑框、孤儿进程关闭。
+- 修复发布校验、更新锁、会话滚动跨重启状态等一批发布/稳定性问题。
+
+## [0.8.8-dev.13] - 2026-11-06
+
+### dev 测试构建
+
+- dev 构建（Pre-release，仅测试机使用；稳定用户不受影响）。
+
+## [0.8.8-dev.12] - 2026-11-06
+
+### dev 测试构建
+
+- dev 构建（Pre-release，仅测试机使用；稳定用户不受影响）。
+
+## [0.8.8-dev.11] - 2026-11-06
+
+### dev 测试构建
+
+- dev 构建（Pre-release，仅测试机使用；稳定用户不受影响）。
+
+## [0.8.8-dev.10] - 2026-11-06
+
+### dev 测试构建
+
+- dev 构建（Pre-release，仅测试机使用；稳定用户不受影响）。
+
+## [0.8.8-dev.9] - 2026-11-06
+
+### dev 测试构建
+
+- dev 构建（Pre-release，仅测试机使用；稳定用户不受影响）。
+
+## [0.8.8-dev.8] - 2026-11-06
+
+### dev 测试构建
+
+- dev 构建（Pre-release，仅测试机使用；稳定用户不受影响）。
+
+## [0.8.8-dev.7] - 2026-11-06
+
+### dev 测试构建
+
+- dev 构建（Pre-release，仅测试机使用；稳定用户不受影响）。
+
+## [0.8.8-dev.6] - 2026-11-06
+
+### dev 测试构建
+
+- dev 构建（Pre-release，仅测试机使用；稳定用户不受影响）。
+
+## [0.8.8-dev.5] - 2026-11-06
+
+### dev 测试构建
+
+- dev 构建（Pre-release，仅测试机使用；稳定用户不受影响）。
+
+## [0.8.8-dev.4] - 2026-11-06
+
+### dev 测试构建
+
+- dev 构建（Pre-release，仅测试机使用；稳定用户不受影响）。
+
+## [0.8.8-dev.3] - 2026-11-06
+
+### dev 测试构建
+
+- dev 构建（Pre-release，仅测试机使用；稳定用户不受影响）。
+
+## [0.8.8-dev.2] - 2026-11-06
+
+### dev 测试构建
+
+- dev 构建（Pre-release，仅测试机使用；稳定用户不受影响）。
+
+## [0.8.8-dev.1] - 2026-11-04
+
+### dev 测试构建
+
+- dev 构建（Pre-release，仅测试机使用；稳定用户不受影响）。
+
 ## [0.8.8-linux] - 2026-11-03
 
 ### 上游同步
@@ -455,23 +590,6 @@
 - 审计已映射会话的真实 `agentPreset`：与当前配置不一致 → **自动退役重建**，
   写 L1 `session-preset-rebuilt`（旧会话工具表在创建时定死，修 profile 也不会热加载）；
 - 只在“实际 preset 有值且不同”时重建，旧会话没记录 preset 不会误删。
-
-## [0.8.4-linux] - 2026-11-01
-
-### 新增
-
-- **QQ 私聊 B站 工具**：`qq_bili_search` / `qq_bili_video` / `qq_bili_feed` / `qq_bili_like` / `qq_bili_post`（发动态/评论，支持 `dryRun` 预览）；复用四本账、出站身份闸与审计；
-- **设置页「QQ 手动工具（B站）」卡片**：总开关、工具说明、最近操作记录。
-
-### 变更（Linux-only fork）
-
-- 扫码登录改为 Linux 浏览器发现（chromium / chrome / edge / brave / snap，支持 `SURFCORE_BROWSER`），headless 失败回退，进程组清理；
-- 移除 Windows 兼容层：打开浏览器只用 `xdg-open`，语音启动/停止在 Linux 结构化拒绝并给手动 `python -m voxd` 命令，更新解压用 `unzip`、应用更新用递归复制；
-- README 重构为 fork 视角（上游介绍改为链接）；
-- 版本号后缀 `-linux` 标识本 fork；回归 108/108。
-
-> 调查记录：[Linux（fnOS）适配](docs/cases/2026-11-01-linux-adaptation.md)
-
 
 ## [0.8.4] - 2026-11-01
 
