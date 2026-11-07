@@ -43,6 +43,14 @@ window.__ModuleLoader__.load({
   // 没有挂载选择器时（例如旧宿主/测试）才回退到宿主原生框。
   let browseModalBridge = null;
   async function browseNative(mode = "dir", title = "", filter = "") {
+    // Linux/远程 Web 优先用页面内选择器；只有选择器未挂载（旧宿主/测试）才回退原生框。
+    if (browseModalBridge) {
+      try {
+        return await browseModalBridge({ mode, title, filter });
+      } catch {
+        // 选择器异常时继续走宿主原生框，避免设置页卡死。
+      }
+    }
     // filter 只接受宿主认识的枚举（如 snowluma），不把原始 filter 串传给宿主。
     const q = `mode=${mode === "file" ? "file" : "dir"}&title=${encodeURIComponent(title)}${filter ? `&filter=${encodeURIComponent(filter)}` : ""}`;
     const res = await fetch(`${API}/browse?${q}`, { headers: { accept: "application/json" }, signal: AbortSignal.timeout(180000) });
@@ -74,8 +82,14 @@ window.__ModuleLoader__.load({
     };
     useEffect(() => { load(""); }, []);
     const choose = () => {
-      if (mode === "file") { if (selected) finish(selected); return; }
-      if (data?.path) finish(data.path);
+      const typed = String(value || "").trim();
+      if (mode === "file") {
+        const picked = selected || typed;
+        if (picked) finish(picked);
+        return;
+      }
+      const picked = typed || data?.path || "";
+      if (picked) finish(picked);
     };
     return h("div", { className: "qbw-modal-backdrop", onClick: (e) => { if (e.target === e.currentTarget) cancel(); } },
       h("div", { className: "qbw-modal", style: { width: "min(720px,94vw)", maxHeight: "86vh", display: "flex", flexDirection: "column" } },

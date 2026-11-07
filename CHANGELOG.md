@@ -14,6 +14,8 @@
 ### 修复
 
 - 修复 embedding pack quarantine 目录同毫秒冲突：覆盖备份后立即卸载会因 `rename` 目标已存在而失败；目标冲突时追加 `-2`、`-3` 后缀，不覆盖已有备份（#23）。
+- 修复设置页 Linux 路径选择器未接线：`browseNative` 现在优先调用已挂载的 `PathPickerModal`，并支持直接粘贴绝对路径。
+- 新增 Linux 一键安装 `scripts/bootstrap.sh`；`bootstrap.ps1` 的仓库地址/分支改为 `surfcore-fnos-extended/linux`；`sync-upstream.mjs` 默认同步 `fork/linux`。
 
 ## [0.8.9] - 2026-11-07
 

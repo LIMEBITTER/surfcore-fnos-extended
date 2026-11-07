@@ -1,15 +1,15 @@
 #!/usr/bin/env node
 /**
- * 同步上游 Mieksido/surfcore 到本仓库的 main。
+ * 同步上游 Mieksido/surfcore 到本仓库的当前 fork 分支（默认 linux）。
  *
  * 背景：2026-11-01 本仓库已 Leave fork network（不再是 GitHub 意义上的 fork），
  * 网页上的「Sync fork」按钮不存在了，但 git 层面的 fetch/merge 完全不受影响。
  *
  * 用法：
- *   node scripts/sync-upstream.mjs                # fetch → 合并 → 推 origin/main
+ *   node scripts/sync-upstream.mjs                # fetch → 合并 → 推 fork/linux
  *   node scripts/sync-upstream.mjs --dry-run      # 只看上游有哪些新提交，不动工作区
  *   node scripts/sync-upstream.mjs --no-push      # 合并但不推
- *   node scripts/sync-upstream.mjs --branch main  # 换同步的目标分支（默认 main）
+ *   node scripts/sync-upstream.mjs --branch linux # 换同步的目标分支（默认 linux）
  *
  * 退出码：
  *   0  已是最新，或合并并推送成功
@@ -25,7 +25,8 @@ import process from 'node:process';
 const UPSTREAM_REMOTE = 'upstream';
 const UPSTREAM_URL = 'https://github.com/Mieksido/surfcore.git';
 const UPSTREAM_BRANCH = 'main';
-const ORIGIN_REMOTE = 'origin';
+const DEFAULT_TARGET_BRANCH = 'linux';
+let ORIGIN_REMOTE = 'origin';
 
 const argv = process.argv.slice(2);
 const has = (flag) => argv.includes(flag);
@@ -36,7 +37,7 @@ const opt = (flag, fallback) => {
 
 const DRY_RUN = has('--dry-run');
 const NO_PUSH = has('--no-push');
-const TARGET_BRANCH = opt('--branch', 'main');
+let TARGET_BRANCH = opt('--branch', DEFAULT_TARGET_BRANCH);
 
 let step = 0;
 const say = (msg = '') => console.log(msg);
@@ -70,8 +71,11 @@ const git = (args, opts) => run('git', args, opts);
 head('检查仓库状态');
 
 const root = git(['rev-parse', '--show-toplevel'], { allowFail: true });
-if (!root.ok) die('这里不是 git 仓库', '请在 surfcore-linux 仓库目录里运行');
+if (!root.ok) die('这里不是 git 仓库', '请在 surfcore-fnos-extended 仓库目录里运行');
 say(`  ${root.out}`);
+const hasFork = git(['remote', 'get-url', 'fork'], { allowFail: true }).ok;
+ORIGIN_REMOTE = hasFork ? 'fork' : 'origin';
+say(`  推送远端：${ORIGIN_REMOTE}`);
 
 const branch = git(['rev-parse', '--abbrev-ref', 'HEAD']).out;
 if (branch !== TARGET_BRANCH) {

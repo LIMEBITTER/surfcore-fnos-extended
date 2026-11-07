@@ -1,6 +1,7 @@
 // Linux 适配回归：浏览器发现、无浏览器时的可读错误、语音包的平台拒绝。
 // 不启动真实浏览器、不联网、不写用户数据。
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 
 const { findBrowser, startQrLogin } = await import('../plugins/surfcore/lib/bili-qr-login.mjs');
 
@@ -44,4 +45,9 @@ if (process.platform !== 'win32') {
 
 process.env.SURFCORE_BROWSER = savedBrowser ?? '';
 if (savedBrowser === undefined) delete process.env.SURFCORE_BROWSER;
-console.log('✓ Linux 适配回归通过（浏览器发现 / 无浏览器提示 / 语音包平台拒绝）');
+// 5) 设置页的路径选择器必须真正接到 browseNative，而不是只挂载组件。
+const clientSource = fs.readFileSync(new URL('../plugins/surfcore/lib/client.js', import.meta.url), 'utf8');
+assert.match(clientSource, /if \(browseModalBridge\)/, 'browseNative 应优先检查 PathPickerModal 桥');
+assert.match(clientSource, /browseModalBridge\(\{ mode, title, filter \}\)/, 'browseNative 应调用 PathPickerModal 桥');
+
+console.log('✓ Linux 适配回归通过（浏览器发现 / 无浏览器提示 / 语音包平台拒绝 / 路径选择器接线）');

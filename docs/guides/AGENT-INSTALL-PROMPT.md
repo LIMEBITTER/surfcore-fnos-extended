@@ -3,20 +3,20 @@
 > 用法：把下面代码块里的全部内容贴给你的 DSH，让它照着做。你只需要在它停下时回答问题。
 
 ```
-帮我在这台 Windows 机器上安装 SurfCore（一个 QQ × B站 的 DSH 插件）。
+帮我在这台 Linux 机器上安装 SurfCore（一个 QQ × B站 的 DSH 插件）。
 按顺序做，每步结束报告结果；任何一步失败就停下来告诉我原因，不要自己猜着改。
 
 【0. 先检查环境，缺什么先告诉我，别急着装】
 - node -v          需要 >= 22.13
 - git --version    没有的话改用 zip 方案（见第 2 步备选）
-- 确认 DSH 版本是 0.2.1-rc.2（设置 → 关于）
-- 检查 SnowLuma 是否已安装并登录（端口 3000/3001）：netstat -ano | findstr "3000 3001"
+- 确认 DSH 版本是 0.2.1-rc.5（设置 → 关于）
+- 检查 SnowLuma 是否已安装并登录（端口 3000/3001）：ss -ltn | grep -E ':(3000|3001)\b'
   如果没装：停下来告诉我，让我先装 SnowLuma（这是第三方程序，你不要替我装、不要代扫码）
 
 【1. 拉代码】
-cd $env:USERPROFILE
-git clone --depth 1 https://github.com/Mieksido/surfcore.git
-cd surfcore
+cd ~
+git clone --depth 1 --branch linux https://github.com/LIMEBITTER/surfcore-fnos-extended.git
+cd surfcore-fnos-extended
 （已经有目录就 git pull --ff-only）
 
 【2. 装依赖】
@@ -30,7 +30,7 @@ node scripts/setup-dsh.mjs
 【4. 自检，把结果贴给我】
 node scripts/test-version.mjs
 node scripts/detect-profile.mjs
-然后读取 %USERPROFILE%\.dsh\profiles\<上一步的 profile>\package.json，
+然后读取 ~/.dsh/profiles/<上一步的 profile>/package.json，
 确认 dsh.profile.bundles 里有 "surfcore"。
 
 【5. 停在这里，剩下的必须我自己做，你不能代做】
@@ -43,20 +43,20 @@ node scripts/detect-profile.mjs
 - 不要把 SnowLuma 打包、安装、自动登录或代扫码（EULA §5.4 禁止）
 - 不要改任何已存在的 config.json 字段，不要覆盖我的配置
 - 不要 commit / push 任何东西，只做安装
-- 不要动 %USERPROFILE%\.dsh 里其它 profile
+- 不要动 ~/.dsh 里其它 profile
 
 【如果失败，按这个格式回报】
 1. 卡在第几步
 2. 完整报错原文
 3. node -v 的输出
 4. node scripts/detect-profile.mjs 的输出
-5. %USERPROFILE%\.dsh\surfcore\plugin.log 的最后 10 行
+5. ~/.dsh/surfcore/plugin.log 的最后 10 行
 ```
 
 ## 附：一行命令版（如果 DSH 不方便分步执行）
 
 ```
-powershell -ExecutionPolicy Bypass -c "irm https://raw.githubusercontent.com/Mieksido/surfcore/main/scripts/bootstrap.ps1 | iex"
+curl -fsSL https://raw.githubusercontent.com/LIMEBITTER/surfcore-fnos-extended/linux/scripts/bootstrap.sh | bash
 ```
 
 跑完同样要：**重启 DSH → 设置 → SurfCore → 诊断 → 一键安装（全部）**。

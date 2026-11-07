@@ -1,7 +1,7 @@
 ﻿# SurfCore 一键引导安装（Windows PowerShell）
 #
 # 陌生人用法（复制这一行到 PowerShell）：
-#   powershell -ExecutionPolicy Bypass -c "irm https://raw.githubusercontent.com/LIMEBITTER/surfcore-linux/main/scripts/bootstrap.ps1 | iex"
+#   powershell -ExecutionPolicy Bypass -c "irm https://raw.githubusercontent.com/LIMEBITTER/surfcore-fnos-extended/linux/scripts/bootstrap.ps1 | iex"
 #
 # 只检查环境不安装：
 #   ... | iex -Check
@@ -84,15 +84,15 @@ if (Test-Path (Join-Path $Dir 'package.json')) {
     Pop-Location
   }
 } elseif ($gitCmd) {
-  & git clone --depth 1 https://github.com/LIMEBITTER/surfcore-linux.git $Dir
+  & git clone --depth 1 --branch linux https://github.com/LIMEBITTER/surfcore-fnos-extended.git $Dir
   if ($LASTEXITCODE -ne 0) { Bad 'git clone 失败'; return }
   Ok '克隆完成'
 } else {
-  $zip = Join-Path $env:TEMP 'surfcore-linux-main.zip'
+  $zip = Join-Path $env:TEMP 'surfcore-fnos-extended-linux.zip'
   Say '  下载 zip …'
-  Invoke-WebRequest -Uri 'https://github.com/LIMEBITTER/surfcore-linux/archive/refs/heads/main.zip' -OutFile $zip
+  Invoke-WebRequest -Uri 'https://github.com/LIMEBITTER/surfcore-fnos-extended/archive/refs/heads/linux.zip' -OutFile $zip
   Expand-Archive -LiteralPath $zip -DestinationPath $env:TEMP -Force
-  $src = Get-ChildItem $env:TEMP -Directory -Filter 'surfcore-linux-main' | Select-Object -First 1
+  $src = Get-ChildItem $env:TEMP -Directory -Filter 'surfcore-fnos-extended-linux' | Select-Object -First 1
   Move-Item $src.FullName $Dir
   Ok '解压完成'
 }
