@@ -128,7 +128,8 @@ window.__ModuleLoader__.load({
     const CSS = `
 /* 主题语义层：只用 DSH 提供的 light/dark token，组件里不再写死颜色。
    on-brand 用 bg-base：浅色主题是浅字压深品牌色，深色主题是深字压浅品牌色。 */
-:root{
+body{
+  /* 必须挂在 body：DSH 的 --dsw-* 定义在 body 上，写在 :root 会拿不到值、退回硬编码浅色。 */
   --qbw-surface: var(--dsw-alias-bg-overlay, var(--dsw-alias-bg-layer-1, #ffffff));
   --qbw-surface-2: var(--dsw-alias-bg-layer-2, #f2f4f7);
   --qbw-text: var(--dsw-alias-label-primary, #1f2328);
@@ -146,7 +147,7 @@ window.__ModuleLoader__.load({
   --qbw-err-text: var(--qbw-err);
 }
 @supports (color: color-mix(in srgb, #000 50%, #fff)){
-  :root{
+  body{
     --qbw-ok-text: color-mix(in srgb, var(--qbw-ok) 70%, var(--qbw-text));
     --qbw-warn-text: color-mix(in srgb, var(--qbw-warn) 55%, var(--qbw-text));
     --qbw-err-text: color-mix(in srgb, var(--qbw-err) 85%, var(--qbw-text));
