@@ -2319,19 +2319,35 @@ ${body}`;
     return { process: snowLumaProcessView(result?.process ?? result ?? {}) };
   }
 
-  // 只用系统默认浏览器打开本地回环地址；URL 由端口拼出，不接受外部输入。
-  // Linux-only：本机有桌面会话时用 xdg-open；NAS 没桌面时会失败，但不影响返回 URL。
-  function openLocalUrl(url) {
-    if (process.env.SURFCORE_SKIP_AUTOSTART === '1') return false;
-    if (!/^http:\/\/127\.0\.0\.1:\d{2,5}$/.test(String(url))) return false;
+  // Linux 上的「用系统浏览器 / 文件管理器打开」统一走这里。
+  // 两个坑：① 很多 NAS 根本没装 xdg-open，spawn 一个不存在的命令会异步抛 ENOENT，
+  // 没有 'error' 监听就是未捕获异常，直接把桥接进程带走；② 无桌面时它静默失败。
+  // 所以先查 PATH、再挂 error 监听，并且永远不承诺「已经打开了」。
+  function tryXdgOpen(target) {
+    if (!['linux', 'freebsd', 'openbsd', 'sunos'].includes(process.platform)) return false;
+    let bin = '';
+    for (const dir of String(process.env.PATH ?? '').split(':')) {
+      if (!dir) continue;
+      const candidate = path.join(dir, 'xdg-open');
+      try { if (fs.statSync(candidate).isFile()) { bin = candidate; break; } } catch {}
+    }
+    if (!bin) return false;
     try {
-      const child = spawn('xdg-open', [String(url)], { detached: true, stdio: 'ignore' });
+      const child = spawn(bin, [String(target)], { detached: true, stdio: 'ignore' });
       child.on('error', () => {});
       child.unref();
       return true;
     } catch {
       return false;
     }
+  }
+
+  // 只用系统默认浏览器打开本地回环地址；URL 由端口拼出，不接受外部输入。
+  // Linux-only：本机有桌面会话时用 xdg-open；NAS 没桌面时会失败，但不影响返回 URL。
+  function openLocalUrl(url) {
+    if (process.env.SURFCORE_SKIP_AUTOSTART === '1') return false;
+    if (!/^http:\/\/127\.0\.0\.1:\d{2,5}$/.test(String(url))) return false;
+    return tryXdgOpen(url);
   }
 
   // 网盘资源用系统默认浏览器打开。只允许固定网盘域名，不接受任意 URL；
@@ -2357,8 +2373,15 @@ ${body}`;
     }
     try {
       if (process.platform === 'linux') {
-        // Linux/fnOS 无桌面时 xdg-open 可能静默失败；不阻塞插件，复制链接仍可用。
-        spawn('xdg-open', [text], { detached: true, stdio: 'ignore' }).unref();
+        // 没装 xdg-open 或没有桌面时返回 false：不能假装打开成功，前端要能把链接交给用户。
+        if (!tryXdgOpen(text)) {
+          return {
+            ok: false,
+            code: 'OPEN_NO_BROWSER',
+            error: '这台机器没有可用的浏览器打开方式（缺少 xdg-open，或没有桌面会话）',
+            hint: '请复制链接后手动打开',
+          };
+        }
       } else {
         spawn(process.env.ComSpec || 'cmd.exe', ['/d', '/c', 'start', '""', `"${text}"`], {
           detached: true, stdio: 'ignore', windowsHide: true, windowsVerbatimArguments: true,
@@ -2575,7 +2598,12 @@ ${body}`;
    */
   async function stopSnowLuma() {
     if (process.platform !== 'win32') {
-      return { ok: false, code: 'SNOWLUMA_STOP_UNSUPPORTED', error: '当前平台不支持自动关闭 SnowLuma', hint: '请手动结束 SnowLuma 进程' };
+      return {
+        ok: false,
+        code: 'SNOWLUMA_STOP_UNSUPPORTED',
+        error: '当前平台不支持由插件自动关闭 SnowLuma',
+        hint: 'Docker 部署：cd snowluma-docker && docker compose stop；原生部署：kill 掉 index.mjs 那个进程',
+      };
     }
     const script = [
       '$ports=@(5099,3000,3001)',
@@ -2758,7 +2786,17 @@ ${body}`;
       if (method !== 'POST') { json(res, 405, { ok: false, code: 'METHOD_NOT_ALLOWED', error: '只支持 POST' }); return; }
       const NETDISK_URL = 'https://pan.quark.cn/s/ec6cf2b123de?pwd=sxUZ';
       if (process.platform !== 'win32') {
-        json(res, 200, { ok: true, opened: false, url: NETDISK_URL, hint: '当前系统不能自动打开浏览器，请手动打开这个链接' });
+        // Linux/fnOS：有桌面时 xdg-open 能把链接丢给默认浏览器；无桌面时它静默失败，
+        // 所以这里不做「已打开」的承诺，链接照样回给前端，用户点一下就行。
+        const openedByXdg = tryXdgOpen(NETDISK_URL);
+        json(res, 200, {
+          ok: true,
+          opened: false,
+          url: NETDISK_URL,
+          hint: openedByXdg
+            ? '已交给系统浏览器（xdg-open）；没弹出就手动打开这个链接'
+            : '这台机器没有可用的浏览器打开方式（缺少 xdg-open，或没有桌面会话），请手动打开这个链接',
+        });
         return;
       }
       try {
@@ -2792,7 +2830,16 @@ ${body}`;
         }
         const file = path.join(dir, name);
         if (process.platform !== 'win32') {
-          json(res, 200, { ok: true, opened: false, path: file, dir, hint: '当前系统不能自动打开文件管理器，路径已给出' });
+          const openedByXdg = tryXdgOpen(dir);
+          json(res, 200, {
+            ok: true,
+            opened: false,
+            path: file,
+            dir,
+            hint: openedByXdg
+              ? '已交给系统文件管理器（xdg-open）；没弹出就按这个路径自己找'
+              : '这台机器没有可用的文件管理器打开方式（缺少 xdg-open，或没有桌面会话），请按这个路径自己找',
+          });
           return;
         }
         execFile('explorer.exe', ['/select,', file], { windowsHide: true }, () => {});
@@ -2891,7 +2938,12 @@ ${body}`;
         ? 'Embedding 包 (*.zip)|*.zip|所有文件 (*.*)|*.*'
         : '可执行文件 (*.exe)|*.exe|所有文件 (*.*)|*.*';
     if (process.platform !== 'win32') {
-      json(res, 200, { ok: false, error: '只有 Windows 支持原生选择框，请手动填路径' });
+      json(res, 200, {
+        ok: false,
+        code: 'BROWSE_UNSUPPORTED',
+        error: '当前系统没有系统级文件选择框（只有 Windows 有）',
+        hint: '用界面里的目录浏览选，或直接把路径粘进来；文件路径可先浏览到目录，再补上文件名',
+      });
       return;
     }
     const psQuote = (s) => `'${String(s).replace(/'/g, "''")}'`;

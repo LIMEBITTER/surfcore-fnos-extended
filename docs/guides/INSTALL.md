@@ -163,6 +163,14 @@ node scripts/setup-dsh.mjs desktop
 npm start
 ```
 
+非 Windows（Linux / macOS / fnOS）用仓库根目录的 shell 脚本：
+
+```bash
+./start.sh            # 前台监护循环，崩了 5 秒后自动重启
+./restart.sh          # 停旧实例（锁文件 PID + 命令行两条路）再后台拉起
+./stop-qq-bot.sh      # 停桥接；--all 连 SnowLuma 一起停
+```
+
 看到控制台打印 `[bridge] OneBot 已连接` 就说明连上了 SnowLuma。
 
 ---

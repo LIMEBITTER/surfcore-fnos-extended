@@ -7,39 +7,100 @@
 // config.json 里的旧端口会让桥接一直 401/超时——表现却是「QQ 有消息、DSH 没反应」，
 // 极难自查。所以这里把探测抽成共用逻辑：脚本用它写回配置，桥接启动时用它兜底。
 //
-// 平台：Windows 走 netstat + tasklist；其他平台只做 HTTP 探活（不枚举进程）。
+// 平台（2026-11-07 起三平台都枚举进程，不再只支持 Windows）：
+//   Windows  netstat -ano -p TCP        + tasklist
+//   Linux    ss -ltnp（回退 netstat）    + /proc/<pid>/{comm,cmdline}
+//   macOS    netstat -ltn              + ps
+// 全都拿不到时退化成「只按端口做 HTTP 探活」，仍然不会误连别的服务。
 import { execSync } from 'node:child_process';
+import fs from 'node:fs';
 
-/** 列出「某个进程在 127.0.0.1 上监听的端口」。 */
-export function listeningLoopbackPorts() {
-  let out = '';
-  try {
-    out = execSync('netstat -ano -p TCP', { encoding: 'utf8', windowsHide: true });
-  } catch {
-    return [];
-  }
+const isWin = process.platform === 'win32';
+
+/**
+ * 解析 `ss -ltnp` / `netstat -ltnp` 的输出，取出「监听在回环地址上的端口 + 进程号」。
+ *
+ * ss 示例：`LISTEN 0 511 127.0.0.1:3080 0.0.0.0:* users:(("node",pid=53780,fd=20))`
+ * netstat 示例：`tcp 0 0 127.0.0.1:3080 0.0.0.0:* LISTEN 53780/node`
+ *
+ * 导出的目的是给回归测试用（`scripts/test-linux-adaptation.mjs`）。
+ */
+export function parseListenOutput(out) {
   const rows = [];
-  for (const line of out.split(/\r?\n/)) {
-    if (!line.includes('LISTENING')) continue;
-    const cols = line.trim().split(/\s+/);
-    const local = cols[1] ?? '';
-    const pid = cols[4] ?? '';
-    if (!/^127\.0\.0\.1:\d+$/.test(local)) continue;
-    rows.push({ port: Number(local.split(':').pop()), pid });
+  for (const raw of String(out ?? '').split(/\r?\n/)) {
+    const line = raw.trim();
+    if (!line) continue;
+    const cols = line.split(/\s+/);
+    const local = cols.find((c) => /^(127\.0\.0\.1|\[::1\]|0\.0\.0\.0|\*):\d+$/.test(c));
+    if (!local) continue;
+    const m = local.match(/:(\d+)$/);
+    if (!m) continue;
+    const host = local.slice(0, local.lastIndexOf(':'));
+    // 只听 0.0.0.0 的进程对本机回环同样可见（DSH 默认绑 127.0.0.1，但允许用户显式放开）。
+    if (!/^(127\.0\.0\.1|\[::1\]|0\.0\.0\.0|\*)$/.test(host)) continue;
+    let pid = '';
+    const fromSs = line.match(/pid=(\d+)/);
+    if (fromSs) pid = fromSs[1];
+    if (!pid) {
+      const fromNetstat = line.match(/\s(\d+)\/\S+\s*$/);
+      if (fromNetstat) pid = fromNetstat[1];
+    }
+    rows.push({ port: Number(m[1]), pid });
   }
   return rows;
 }
 
-function processNames() {
-  const map = new Map();
+function runQuiet(cmd) {
   try {
-    const out = execSync('tasklist /fo csv /nh', { encoding: 'utf8', windowsHide: true });
+    return execSync(cmd, { encoding: 'utf8', windowsHide: true, stdio: ['ignore', 'pipe', 'ignore'] });
+  } catch {
+    return '';
+  }
+}
+
+/** 列出回环上正在监听的端口（含进程号；拿不到 pid 时为空串）。 */
+export function listeningLoopbackPorts() {
+  if (isWin) {
+    const out = runQuiet('netstat -ano -p TCP');
+    const rows = [];
+    for (const line of out.split(/\r?\n/)) {
+      if (!line.includes('LISTENING')) continue;
+      const cols = line.trim().split(/\s+/);
+      const local = cols[1] ?? '';
+      const pid = cols[4] ?? '';
+      if (!/^(127\.0\.0\.1|0\.0\.0\.0):\d+$/.test(local)) continue;
+      rows.push({ port: Number(local.split(':').pop()), pid });
+    }
+    return rows;
+  }
+  // Linux/BSD：ss 输出更稳，netstat 作回退（macOS 只有 netstat）。
+  const text = runQuiet('ss -ltnp 2>/dev/null') || runQuiet('netstat -ltnp 2>/dev/null') || runQuiet('netstat -ltn 2>/dev/null');
+  return parseListenOutput(text);
+}
+
+/**
+ * 进程的「身份串」：名字 + 命令行。
+ *
+ * Windows 上任务名就是 Harness.exe；Linux 上跑的是 `node /path/to/dsh`，
+ * 只看 comm（node）永远匹配不到 dsh，所以必须把 cmdline 一起带上。
+ */
+function processSignature(pid) {
+  const id = String(pid ?? '').trim();
+  if (!id) return '';
+  if (isWin) {
+    const out = runQuiet('tasklist /fo csv /nh');
     for (const line of out.split(/\r?\n/)) {
       const m = line.match(/^"([^"]+)","(\d+)"/);
-      if (m) map.set(m[2], m[1]);
+      if (m && m[2] === id) return m[1];
     }
-  } catch { /* 拿不到进程名就只按端口探测 */ }
-  return map;
+    return '';
+  }
+  try {
+    const comm = fs.readFileSync(`/proc/${id}/comm`, 'utf8').trim();
+    const cmd = fs.readFileSync(`/proc/${id}/cmdline`, 'utf8').replace(/\0/g, ' ').trim();
+    return `${comm} ${cmd}`;
+  } catch { /* 不是 Linux，或进程已退出 */ }
+  return runQuiet(`ps -p ${Number(id)} -o command=`);
 }
 
 /** DSH 的 Web 服务对未鉴权请求返回 401（有时 200），并带自己的响应头。 */
@@ -49,10 +110,8 @@ export async function looksLikeDsh(port, timeoutMs = 1500) {
 
 /** 枚举本机正在监听的 DSH，返回 `http://127.0.0.1:<port>`；找不到返回 null。 */
 export async function discoverDshBaseUrl() {
-  if (process.platform !== 'win32') return null;
-  const names = processNames();
   const candidates = listeningLoopbackPorts()
-    .filter(({ pid }) => /harness|dsh/i.test(names.get(pid) ?? ''))
+    .filter(({ pid }) => /harness|dsh/i.test(processSignature(pid)))
     .map(({ port }) => port)
     .filter((port, i, all) => all.indexOf(port) === i);
   for (const port of candidates) {

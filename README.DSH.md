@@ -169,8 +169,13 @@ NODE
 
 ```bash
 cd ~/surfcore
+./start.sh                  # 推荐：崩了自动重启（等价 start.bat）
+# 或者只要一次性前台/后台跑：
 nohup npm start >> state/bridge.log 2>&1 &
 ```
+
+其它两个脚本：`./restart.sh`（按 state/bridge.lock 的 PID + bridge.js 命令行重启，防双实例）、
+`./stop-qq-bot.sh`（停桥接；加 `--all` 连 Docker 里的 SnowLuma 一起停）。
 
 然后看 [§5](#5-重启-dsh) 重启 DSH，再验收。
 

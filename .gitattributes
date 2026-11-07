@@ -1,0 +1,5 @@
+# 跨平台换行：shell 脚本必须 LF，Windows 批处理必须 CRLF。
+*.sh   text eol=lf
+*.bat  text eol=crlf
+*.cmd  text eol=crlf
+*.ps1  text eol=crlf

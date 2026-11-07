@@ -50,4 +50,43 @@ const clientSource = fs.readFileSync(new URL('../plugins/surfcore/lib/client.js'
 assert.match(clientSource, /if \(browseModalBridge\)/, 'browseNative 应优先检查 PathPickerModal 桥');
 assert.match(clientSource, /browseModalBridge\(\{ mode, title, filter \}\)/, 'browseNative 应调用 PathPickerModal 桥');
 
-console.log('✓ Linux 适配回归通过（浏览器发现 / 无浏览器提示 / 语音包平台拒绝 / 路径选择器接线）');
+console.log('✓ Linux 适配回归通过（浏览器发现 / 无浏览器提示 / 语音包平台拒绝 / 路径选择器接线 / 启动脚本三件套 / ss 端口解析 / node 发现 / 平台提示文案）');
+
+// 5) 启动脚本三件套：以前只有 .bat，Linux 上没有任何入口
+const { spawnSync } = await import('node:child_process');
+const { fileURLToPath } = await import('node:url');
+for (const script of ['start.sh', 'restart.sh', 'stop-qq-bot.sh']) {
+  const full = fileURLToPath(new URL(`../${script}`, import.meta.url));
+  assert.ok(fs.existsSync(full), `${script} 必须存在（Linux 启动入口）`);
+  assert.notEqual(fs.statSync(full).mode & 0o111, 0, `${script} 必须可执行`);
+  const syntax = spawnSync('bash', ['-n', full], { encoding: 'utf8' });
+  assert.equal(syntax.status, 0, `${script} 语法必须正确：${syntax.stderr}`);
+}
+
+// 6) 端口枚举必须能在 POSIX 上解析 ss（旧版只解析 Windows netstat）
+const { parseListenOutput, listeningLoopbackPorts } = await import('../src/dsh-port.js');
+assert.deepEqual(
+  parseListenOutput('LISTEN 0 511 127.0.0.1:3080 0.0.0.0:* users:(("node",pid=53780,fd=20))'),
+  [{ port: 3080, pid: '53780' }],
+  ' 应解析 ss -ltnp 的回环监听行',
+);
+assert.ok(Array.isArray(listeningLoopbackPorts()), '端口枚举不应抛异常');
+
+// 7) node 发现必须能在 Linux 上找到真实可执行的 node（旧版只列 C:\\Program Files）
+const { findNodeExe } = await import('../src/node-path.js');
+const foundNode = findNodeExe();
+assert.ok(fs.existsSync(foundNode), `findNodeExe() 应返回存在的文件，实际：${foundNode}`);
+
+// 8) 平台相关提示不能再写死 launcher.bat / 只有 Windows（Linux 用户照着做会失败）
+const bridgeSource = fs.readFileSync(fileURLToPath(new URL('../src/bridge.js', import.meta.url)), 'utf8');
+assert.match(bridgeSource, /launcher\.sh，或 docker compose up -d/, 'SnowLuma 掉线提示应给出 Linux 命令');
+const pluginSource = fs.readFileSync(fileURLToPath(new URL('../plugins/surfcore/lib/index.js', import.meta.url)), 'utf8');
+assert.match(pluginSource, /docker compose stop/, '关闭 SnowLuma 的提示应给出 Docker 命令');
+
+// 9) 不能再出现裸 spawn(xdg-open)：本机没有 xdg-open，ENOENT 会变成未捕获异常
+assert.equal(
+  pluginSource.split("spawn('xdg-open'").length - 1,
+  0,
+  "xdg-open 必须统一走 tryXdgOpen（查 PATH + 挂 error 监听）",
+);
+assert.match(pluginSource, /function tryXdgOpen\(/, "应有统一的 tryXdgOpen 帮助函数");

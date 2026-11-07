@@ -4222,12 +4222,12 @@ async function main() {
       action: 'blocked',
       reason: { code: 'SNOWLUMA_OFFLINE', message },
       impact: '当前无法把消息发到 QQ；通道恢复前会自动跳过主动唤醒，避免先生成后丢弃、白烧 token。',
-      recommendation: '启动或重启 SnowLuma（launcher.bat），确认 OneBot HTTP :3000 与 WS :3001 可用；恢复后会自动继续。',
+      recommendation: `启动或重启 SnowLuma（${process.platform === 'win32' ? 'launcher.bat' : 'launcher.sh，或 docker compose up -d'}），确认 OneBot HTTP :3000 与 WS :3001 可用；恢复后会自动继续。`,
       confidence: 'confirmed',
       dedupeKey: 'snowluma:send-channel-down',
     });
     log('❌ SnowLuma 发送通道不可用；自动唤醒已暂停，避免空烧 token。');
-    log('   处理：启动/重启 SnowLuma（launcher.bat），确认 HTTP :3000 与 WS :3001 可用；恢复后自动继续。');
+    log(`   处理：启动/重启 SnowLuma（${process.platform === 'win32' ? 'launcher.bat' : 'launcher.sh，或 docker compose up -d'}），确认 HTTP :3000 与 WS :3001 可用；恢复后自动继续。`);
   }
 
   function notifySendChannelUp() {
