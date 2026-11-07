@@ -2556,12 +2556,20 @@ F("toolsPath", "bili.mjs 路径", "留空 = 用合体插件自带的 tools/", "t
                   return `${item.name}（查不到：${item.reason || "原因不明"}）`;
                 }).join(" · ")
                 : "还没检查")),
+            updates.lastCheckAt
+              ? h("div", { className: "qbw-hint", style: { marginTop: "2px" } },
+                `上次检查：${new Date(updates.lastCheckAt).toLocaleTimeString("zh-CN", { hour12: false })}${updates.refreshing ? " · 旧结论，正在后台重新检查…" : ""}`)
+              : null,
+            (updates.results ?? []).some((x) => x.notice)
+              ? h("div", { className: "qbw-hint", style: { marginTop: "2px" } },
+                (updates.results ?? []).filter((x) => x.notice).map((x) => `${x.name}：${x.notice}`).join("；"))
+              : null,
             (() => {
               // 查不到/失败：原因 + 建议，常驻显示（不能只留一句"不可查"）
               const bad = (updates.results ?? []).filter((x) => x.status === "unknown" || x.status === "failed" || x.status === "blocked");
               if (!bad.length) return null;
               return h("div", { className: "qbw-hint", style: { color: "var(--qbw-err-text)", marginTop: "4px" } },
-                bad.map((x) => `${x.name}：${x.reason || "原因不明"}${x.hint ? `（${x.hint}）` : ""}`).join("；"));
+                bad.map((x) => `${x.name}：${x.reason || x.blocked || "原因不明"}${x.hint ? `（${x.hint}）` : ""}`).join("；"));
             })(),
             (updates.results ?? []).filter((item) => item.available && item.blocked && item.updateAvailable).length
               ? h("div", { className: "qbw-hint", style: { color: "var(--qbw-err-text)" } },

@@ -687,8 +687,15 @@ export async function inspectGitComponent(component, { fetch = true } = {}) {
       hint: '检查网络后重试；或手动下载新版覆盖',
     };
   }
-  const dirtyOut = await runGit(['-C', dir, 'status', '--porcelain']);
-  const dirty = dirtyOut.ok ? dirtyOut.stdout.split('\n').filter((line) => line.trim()).length : null;
+  // 只统计「已跟踪文件的改动」：未跟踪的临时文件/备份文件不该挡住更新。
+  // （2026-11-07 反馈：仓库明明是干净的，面板却一直显示"本地有未提交改动"——一是把未跟踪文件算进去了，
+  //  二是上一次检查的结论被缓存，提交之后没有自动重查。）
+  const dirtyOut = await runGit(['-C', dir, 'status', '--porcelain', '--untracked-files=no']);
+  const dirtyLines = dirtyOut.ok ? dirtyOut.stdout.split('\n').map((line) => line.trim()).filter(Boolean) : [];
+  const dirty = dirtyOut.ok ? dirtyLines.length : null;
+  const dirtyFiles = dirtyLines
+    .map((line) => line.replace(/^[A-Z?!]{1,2}\s+/, '').replace(/^"|"$/g, ''))
+    .filter(Boolean);
   const behindOut = await runGit(['-C', dir, 'rev-list', '--count', `HEAD..origin/${branch}`]);
   const aheadOut = await runGit(['-C', dir, 'rev-list', '--count', `origin/${branch}..HEAD`]);
   if (!behindOut.ok) {
@@ -712,13 +719,18 @@ export async function inspectGitComponent(component, { fetch = true } = {}) {
     remoteUrl: remoteUrl.stdout.trim(),
     local: local.ok ? local.stdout.trim() : '',
     remote: remote.stdout.trim(),
-    behind, ahead, dirty, changelog,
+    behind, ahead, dirty, dirtyFiles: dirtyFiles.slice(0, 10), changelog,
     fetchError: fetchError || undefined,
     updateAvailable: behind > 0,
-    blocked: dirty > 0 ? '本地有未提交改动' : (ahead > 0 ? '本地有未推送提交（会分叉，拒绝自动合并）' : ''),
-    status: (dirty > 0 || ahead > 0) ? 'blocked' : (behind > 0 ? 'update' : 'latest'),
-    code: dirty > 0 ? 'local-changes' : (ahead > 0 ? 'local-ahead' : (behind > 0 ? 'new-commit' : 'up-to-date')),
-    hint: dirty > 0 ? '先提交或 stash 本地改动，再检查更新' : (ahead > 0 ? '先把本地提交推送或回退，再做自动更新' : ''),
+    // 只有"确实有更新要拉"时，本地改动才算阻塞；否则那只是提醒，不该显示成"更新被阻止"。
+    blocked: (behind > 0 && dirty > 0
+      ? `本地有未提交改动${dirtyFiles.length ? `：${dirtyFiles.slice(0, 3).join('、')}${dirtyFiles.length > 3 ? ` 等 ${dirtyFiles.length} 个文件` : ''}` : ''}`
+      : (ahead > 0 ? '本地有未推送提交（会分叉，拒绝自动合并）' : '')),
+    status: ((behind > 0 && dirty > 0) || ahead > 0) ? 'blocked' : (behind > 0 ? 'update' : 'latest'),
+    code: (behind > 0 && dirty > 0) ? 'local-changes' : (ahead > 0 ? 'local-ahead' : (behind > 0 ? 'new-commit' : 'up-to-date')),
+    hint: (behind > 0 && dirty > 0) ? '先 commit 或 stash 这些文件，再更新' : (ahead > 0 ? '先把本地提交推送或回退，再做自动更新' : ''),
+    localChanges: dirty || 0,
+    notice: (behind === 0 && ahead === 0 && dirty > 0) ? `本地有 ${dirty} 个文件未提交（不影响：当前已是最新）` : '',
   };
 }
 
@@ -1235,13 +1247,33 @@ export function createUpdatesService({ stateDir, components, blockedReason = () 
     return null;
   }
 
+  const STALE_CHECK_MS = 60_000;
+  let lastAutoRefreshAt = 0;
+  /**
+   * 旧的「更新被阻止」结论会一直挂在面板上，直到下一轮 6 小时自动检查或手动点按钮。
+   * 提交/清理仓库之后再打开面板，看到的还是旧结论 —— 所以在读取状态时按需后台重查一次：
+   * 仅当「存在 blocked 结论且结论已超过 1 分钟」，并且最多每分钟触发一次。
+   */
+  function maybeRefreshStaleResults(results) {
+    if (checking || applying) return false;
+    const last = Number(state.lastCheckAt) || 0;
+    if (!last || Date.now() - last < STALE_CHECK_MS) return false;
+    if (!results.some((row) => row && row.status === 'blocked')) return false;
+    if (Date.now() - lastAutoRefreshAt < STALE_CHECK_MS) return false;
+    lastAutoRefreshAt = Date.now();
+    setTimeout(() => { check({ fetch: true }).catch(() => {}); }, 0);
+    return true;
+  }
+
   function status() {
     const results = state.results ?? [];
+    const refreshing = maybeRefreshStaleResults(results);
     const pending = pendingOf(results);
     const unknown = results.filter((row) => row && !row.available && row.status === 'unknown' && !row.blocked);
     return {
       ok: true,
       checking,
+      refreshing,
       applying,
       lastCheckAt: state.lastCheckAt || null,
       lastError: state.lastError || '',
