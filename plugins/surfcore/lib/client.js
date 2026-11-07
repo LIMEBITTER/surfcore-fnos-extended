@@ -2032,6 +2032,8 @@ F("toolsPath", "bili.mjs 路径", "留空 = 用合体插件自带的 tools/", "t
       const launch = overview?.launch ?? {};
       const voiceKnown = launch.voice?.ok !== false;
       const [launchSel, setLaunchSel] = useState({ qq: true, bili: true, pet: false, voice: false, vector: false });
+      // 勾选默认值只算一次「初值」：之后完全以用户点击为准，不跟状态来回覆盖。
+      const launchSelInitRef = useRef(false);
       const [hideConsoles, setHideConsoles] = useState(unified?.platforms?.hideConsoles !== false);
       const [voiceBranch, setVoiceBranch] = useState("voice-local");
       const [vectorPack, setVectorPack] = useState("");
@@ -2049,6 +2051,19 @@ F("toolsPath", "bili.mjs 路径", "留空 = 用合体插件自带的 tools/", "t
           : (v.selected ? `local:${v.selected}` : ((v.models ?? []).find((m) => m.valid) ? `local:${(v.models ?? []).find((m) => m.valid).id}` : ""));
         if (next) setVectorPack(next);
       }, [launch?.vector?.provider, launch?.vector?.cloudActive, launch?.vector?.selected, launch?.vector?.models, vectorPack]);
+      // 勾选状态跟随实际情况初始化一次：向量记忆要「服务在跑 + memory.mode=vector」才算真的在用。
+      useEffect(() => {
+        if (launchSelInitRef.current) return;
+        if (!overview?.launch) return;
+        launchSelInitRef.current = true;
+        const vectorOn = launch?.vector?.running === true && unified?.memory?.mode === "vector";
+        setLaunchSel((prev) => ({
+          ...prev,
+          pet: Boolean(launch?.pet?.running) || prev.pet,
+          voice: Boolean(launch?.voice?.running) || prev.voice,
+          vector: vectorOn || prev.vector,
+        }));
+      }, [overview?.launch, unified?.memory?.mode]);
       const [launchResult, setLaunchResult] = useState(null);
       const [launchErr, setLaunchErr] = useState(null);
       // ── 组件更新（2026-10-26）──────────────────────────────────────────
