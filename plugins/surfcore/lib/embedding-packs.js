@@ -150,11 +150,16 @@ export function saveCloudPackConfig(input = {}) {
   if (activate) state.active = provider;
   writeCloudState(state);
   if (activate) {
+    // 云端直连：没有本地 runtime 进程可以注入 endpoint/key，干脆把 OpenAI 兼容端点写进
+    // vectorMemory.serviceUrl + token（resolveEmbeddingService 的第一优先级），
+    // 这样 provider=cloud 也能真正把请求发到云端，而不是偷偷打到本机 llama。
     updateVectorConfig({
       provider: 'cloud',
       cloudModel: profile.model,
       cloudModelSpace: profile.modelSpace,
       packId: 'cloud',
+      serviceUrl: profile.endpoint,
+      token: profile.apiKey,
     });
   }
   return { ok: true, config: readCloudPackConfig() };
@@ -178,6 +183,8 @@ export function activateCloudProvider(id) {
     cloudModel: profile.model,
     cloudModelSpace: profile.modelSpace,
     packId: 'cloud',
+    serviceUrl: profile.endpoint,
+    token: profile.apiKey,
   });
   return { ok: true, config: readCloudPackConfig() };
 }
@@ -188,7 +195,8 @@ export function activateCloudProvider(id) {
  * 这里给前端一个明确的回路，避免用户卡在 provider=cloud 与 externalRuntime 的矛盾状态。
  */
 export function activateLocalProvider() {
-  updateVectorConfig({ provider: 'local', packId: '' });
+  // 切回本地要把云端直连的 serviceUrl/token 一起清掉，否则会继续把请求发到云端。
+  updateVectorConfig({ provider: 'local', packId: '', serviceUrl: '', token: '' });
   return { ok: true, config: currentVectorConfig(), status: embeddingPacksStatus() };
 }
 

@@ -547,8 +547,15 @@ export function renderVectorRecallBlock(hits, { maxChars = 600 } = {}) {
 export function resolveEmbeddingService(config = {}, { discoveryFile } = {}) {
   const cfg = normalizeVectorMemoryConfig(config);
   if (cfg.serviceUrl) {
-    const base = cfg.serviceUrl.replace(/\/+$/, '').replace(/\/v1$/, '');
-    return { url: `${base}/v1/embeddings`, token: cfg.token, source: 'serviceUrl' };
+    // 三种写法都要支持：
+    //   https://api.siliconflow.cn/v1            → …/v1/embeddings
+    //   https://open.bigmodel.cn/api/paas/v4     → …/v4/embeddings（智谱不是 /v1）
+    //   https://open.bigmodel.cn/…/v4/embeddings → 原样
+    const raw = cfg.serviceUrl.replace(/\/+$/, '');
+    const url = /\/embeddings$/i.test(raw)
+      ? raw
+      : (/\/v\d+$/i.test(raw) ? `${raw}/embeddings` : `${raw}/v1/embeddings`);
+    return { url, token: cfg.token, source: 'serviceUrl' };
   }
   const file = cfg.discoveryFile || discoveryFile || defaultDiscoveryFile();
   let raw;

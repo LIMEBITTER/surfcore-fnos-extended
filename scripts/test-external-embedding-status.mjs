@@ -82,6 +82,14 @@ fs.rmSync(file);
 const missingRuntime = await mod.startEmbeddingRuntime();
 check('外部服务不可达时仍报 pack.runtime-missing', missingRuntime.ok === false && missingRuntime.code === 'pack.runtime-missing', String(missingRuntime.code));
 
+// ── serviceUrl 的三种写法都要拼对（智谱是 /v4/embeddings，不是 /v1）──
+const { resolveEmbeddingService } = await import('../src/vector-memory.js');
+const urlOf = (serviceUrl) => resolveEmbeddingService({ serviceUrl }).url;
+check('serviceUrl 无版本号 → /v1/embeddings', urlOf('http://127.0.0.1:11434') === 'http://127.0.0.1:11434/v1/embeddings', urlOf('http://127.0.0.1:11434'));
+check('serviceUrl 以 /v1 → /v1/embeddings', urlOf('https://api.siliconflow.cn/v1') === 'https://api.siliconflow.cn/v1/embeddings', urlOf('https://api.siliconflow.cn/v1'));
+check('serviceUrl 以 /v4 → /v4/embeddings（智谱）', urlOf('https://open.bigmodel.cn/api/paas/v4') === 'https://open.bigmodel.cn/api/paas/v4/embeddings', urlOf('https://open.bigmodel.cn/api/paas/v4'));
+check('serviceUrl 已是 /embeddings → 原样', urlOf('https://open.bigmodel.cn/api/paas/v4/embeddings') === 'https://open.bigmodel.cn/api/paas/v4/embeddings', urlOf('https://open.bigmodel.cn/api/paas/v4/embeddings'));
+
 fs.rmSync(tmp, { recursive: true, force: true });
 
 const failed = checks.filter((c) => !c.ok);
