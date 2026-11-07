@@ -66,6 +66,8 @@ QQ 私聊里可以直接让 agent 操作 B站。只允许主人私聊，复用�
 
 ## 怎么装
 
+> 如果你是把仓库交给 DSH 自己部署，让它先读 [`README.DSH.md`](README.DSH.md)：那是一份按“检查 → 安装 → 重启 → 验收”写的 agent runbook。
+
 前置：Node ≥ 22.13、DSH 能打开 Web GUI、SnowLuma 已经用 Docker 跑起来、装一个 Chromium（扫码登录用）。
 
 ### 一键（推荐）
