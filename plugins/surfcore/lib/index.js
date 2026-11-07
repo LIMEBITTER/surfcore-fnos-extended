@@ -92,6 +92,7 @@ import {
   embeddingPacksStatus, getCloudProviderProfile, getEmbeddingPackJob, openEmbeddingShare, registerAllInstalledModels, removeEmbeddingPack,
   saveCloudPackConfig, activateCloudProvider, selectEmbeddingPack, startEmbeddingPackInstall, startEmbeddingRuntime, stopEmbeddingRuntime,
   testEmbeddingPack,
+  activateLocalProvider,
 } from './embedding-packs.js';
 import { readWatchHistory } from '../tools/lib/watch-history.mjs';
 import { enrichWatchHistory } from '../tools/lib/watch-actions.mjs';
@@ -1616,11 +1617,16 @@ ${body}`;
       json(res, result.ok ? 200 : 400, result);
       return;
     }
+    if (action === 'activate-local') {
+      const result = activateLocalProvider();
+      json(res, result.ok ? 200 : 400, result);
+      return;
+    }
     if (action === 'refresh') {
       json(res, 200, embeddingPacksStatus());
       return;
     }
-    json(res, 400, { ok: false, code: 'request.invalid', error: '未知 action', hint: '可用：install / remove / select / start / stop / test / save-cloud / refresh' });
+    json(res, 400, { ok: false, code: 'request.invalid', error: '未知 action', hint: '可用：install / remove / select / start / stop / test / save-cloud / activate-cloud / activate-local / refresh' });
   }
 
   // ── 全量记忆卡（只存档；不参与日常提示词）───────────────────────────────

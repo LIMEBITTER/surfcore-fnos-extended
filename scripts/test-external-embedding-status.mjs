@@ -37,6 +37,51 @@ check('没有 discovery 文件时 externalRuntime 为空', !withoutService.exter
 check('没有服务时 installed 为 false', withoutService.installed === false);
 check('没有服务时 hint 提示安装', String(withoutService.hint ?? '').includes('还没有安装 Embedding 包'), withoutService.hint);
 
+// ── 切回本地：云端模式靠 runtime 转发，外部服务用不了，必须有一条明确的回退路径 ──
+fs.writeFileSync(file, JSON.stringify({ port: 11434, apiVersion: 'v1', token: '' }));
+mod.saveCloudPackConfig({ provider: 'siliconflow', endpoint: 'https://api.siliconflow.cn/v1', model: 'BAAI/bge-m3', modelSpace: 'bge-m3@1024-cloud-v1', apiKey: 'sk-test-not-real' });
+const toCloud = mod.embeddingPacksStatus();
+check('保存云端后 provider 变 cloud', toCloud.config?.provider === 'cloud', String(toCloud.config?.provider));
+const back = mod.activateLocalProvider();
+check('切回本地：ok', back.ok === true);
+check('切回本地：provider 变 local', back.config?.provider === 'local', String(back.config?.provider));
+check('切回本地：packId 清空', String(back.config?.packId ?? 'x') === '', String(back.config?.packId));
+check('切回本地后模型空间仍是 bge-m3', String(back.config?.modelSpace ?? '') === 'bge-m3@1024-f16-v1', String(back.config?.modelSpace));
+check('切回本地后仍识别外部服务', back.status?.installed === true && Boolean(back.status?.externalRuntime), String(back.status?.installed));
+
+// ── 没有本地 runtime 包 + 外部服务可达时，"启动 / 一键启动"不能再报 pack.runtime-missing ──
+const http = await import('node:http');
+const stub = http.createServer((req, res) => {
+  let body = '';
+  req.on('data', (chunk) => { body += chunk; });
+  req.on('end', () => {
+    res.writeHead(200, { 'content-type': 'application/json' });
+    res.end(JSON.stringify({
+      object: 'list',
+      model: 'bge-m3',
+      data: [{ object: 'embedding', index: 0, embedding: Array.from({ length: 1024 }, (_, i) => Math.sin(i) / 2) }],
+      usage: { prompt_tokens: 5, total_tokens: 5 },
+    }));
+  });
+});
+await new Promise((resolve) => stub.listen(0, '127.0.0.1', resolve));
+const stubPort = stub.address().port;
+fs.writeFileSync(file, JSON.stringify({ port: stubPort, apiVersion: 'v1', token: '' }));
+
+const started = await mod.startEmbeddingRuntime();
+check('外部服务模式下"启动"返回 ok', started.ok === true, String(started.error ?? ''));
+check('外部服务模式下标记 external', started.external === true);
+check('外部服务模式下 already 为 true（不重复拉进程）', started.already === true);
+check('外部服务模式下 registration 为空数组', Array.isArray(started.registration) && started.registration.length === 0);
+check('外部服务模式下 hint 说明不需要 runtime 包', String(started.hint ?? '').includes('不需要本地运行时包'), started.hint);
+check('外部服务模式下自检跑通并报 1024 维', started.verified === true && started.verification?.dimension === 1024, String(started.verification?.dimension));
+check('外部服务模式下 status.installed 为 true', started.status?.installed === true);
+
+await new Promise((resolve) => stub.close(resolve));
+fs.rmSync(file);
+const missingRuntime = await mod.startEmbeddingRuntime();
+check('外部服务不可达时仍报 pack.runtime-missing', missingRuntime.ok === false && missingRuntime.code === 'pack.runtime-missing', String(missingRuntime.code));
+
 fs.rmSync(tmp, { recursive: true, force: true });
 
 const failed = checks.filter((c) => !c.ok);

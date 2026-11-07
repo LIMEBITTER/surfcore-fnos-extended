@@ -182,6 +182,16 @@ export function activateCloudProvider(id) {
   return { ok: true, config: readCloudPackConfig() };
 }
 
+/**
+ * 切回本地（本地 runtime 包，或 discovery 发现的外部服务）。
+ * 云端模式必须由本地 runtime 进程转发请求——用外部服务（llama.cpp）时没法"切云端"，
+ * 这里给前端一个明确的回路，避免用户卡在 provider=cloud 与 externalRuntime 的矛盾状态。
+ */
+export function activateLocalProvider() {
+  updateVectorConfig({ provider: 'local', packId: '' });
+  return { ok: true, config: currentVectorConfig(), status: embeddingPacksStatus() };
+}
+
 /** 仅服务端内部使用：返回包含 key 的云端 profile，供直连建索引。 */
 export function getCloudProviderProfile(id) {
   const provider = normalizeCloudProvider(id);
@@ -580,7 +590,33 @@ function runtimeEnv() {
 export async function startEmbeddingRuntime() {
   const manifests = listEmbeddingPacks(ROOT).filter((pack) => pack.valid && pack.kind === 'runtime');
   const runtime = manifests[0];
-  if (!runtime) return makeError('pack.runtime-missing', '还没有安装 Embedding 运行时包', '先安装 runtime 包');
+  if (!runtime) {
+    // 没有本地 runtime 包 ≠ 不能启动：本机可能已经在跑外部服务（llama.cpp / 任何 OpenAI 兼容端点），
+    // 由 $DSH_HOME/surfcore/embedding-service.json 发现。这时"启动"应当直接回"已就绪"，
+    // 否则面板会一直逼用户导入 Windows 专用的 runtime 包（Linux 上那个包还解不开）。
+    const externalConfig = currentVectorConfig();
+    const externalStatus = serviceStatus(externalConfig);
+    if (externalStatus.ok) {
+      let verification = null;
+      try {
+        verification = await testEmbeddingPack();
+      } catch (error) {
+        verification = makeError('vector.self-test-failed', String(error?.message ?? error), '检查外部 Embedding 服务是否可用');
+      }
+      return {
+        ok: true,
+        already: true,
+        external: true,
+        url: externalStatus.url,
+        registration: [],
+        verified: verification?.ok === true,
+        verification,
+        status: embeddingPacksStatus(),
+        hint: '正在使用外部 Embedding 服务，不需要本地运行时包',
+      };
+    }
+    return makeError('pack.runtime-missing', '还没有安装 Embedding 运行时包', '先安装 runtime 包，或让外部服务写出 discovery 文件');
+  }
   const result = readPackManifest(runtime.path, { expectedId: runtime.id });
   if (!result.ok) return makeError('pack.manifest-invalid', result.errors[0]?.error ?? '运行时 pack.json 无效', '重新安装运行时包');
   const entry = safePackRelativePath(result.manifest.entry || 'run.bat');

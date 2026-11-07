@@ -6255,7 +6255,33 @@ F("socialV2.voice.ffmpegPath", "ffmpeg 路径", "留空走 PATH", "text", { wide
         setLocalChoice((current) => current || (ids.includes(data.selected) ? data.selected : (data.models?.[0]?.id || "")));
       }, [data]);
       const oneClickLocal = async () => {
-        if (!runtime) { toast("✗ 先导入运行时（runtime）"); return; }
+        if (!runtime && !externalRuntime) { toast("✗ 先导入运行时（runtime）"); return; }
+        if (externalRuntime) {
+          // 外部服务已经就位（llama.cpp / 任意 OpenAI 兼容端点）：不需要选本地模型、也不需要拉进程，
+          // "一键启动"就当成一次自检 + 刷新状态。
+          setBusy("pack-oneclick");
+          try {
+            // provider 还是 cloud 时，外部服务没法按云端模型编码（会拿 bge-m3 的 1024 维冒充云端空间），
+            // 所以"一键启动本地"先把 provider 切回 local，再走 start 的自检。
+            if (data?.config?.provider === "cloud") {
+              const back = await api("/embedding-packs", { method: "POST", body: { action: "activate-local" } });
+              if (!back.ok) { toast(`✗ 切回本地失败：${back.error ?? "未知错误"}`); return; }
+            }
+            const started = await api("/embedding-packs", { method: "POST", body: { action: "start" } });
+            if (!started.ok) { toast(`✗ ${started.error ?? "启动失败"}${started.hint ? `；${started.hint}` : ""}`); return; }
+            const verification = started.verification;
+            setLastTest(verification?.selfTest ? verification : null);
+            await load();
+            toast(started.verified
+              ? `✓ 正在使用外部 Embedding 服务（${verification?.model ?? "bge-m3"} · ${verification?.dimension ?? "?"} 维 · ${verification?.latencyMs ?? "?"}ms），不需要导入运行时`
+              : `⚠️ 外部服务可达但自检失败：${verification?.error ?? "未知错误"}`);
+          } catch (e) {
+            toast(`✗ ${e.message}`);
+          } finally {
+            setBusy("");
+          }
+          return;
+        }
         if (!localChoice) { toast("✗ 先选一个本地模型"); return; }
         if (!packs.find((pack) => pack.id === localChoice && pack.valid)) { toast("✗ 这个模型还没导入"); return; }
         setBusy("pack-oneclick");
@@ -6279,7 +6305,12 @@ F("socialV2.voice.ffmpegPath", "ffmpeg 路径", "留空走 PATH", "text", { wide
         }
       };
       const oneClickCloud = async () => {
-        if (!runtime) { toast("✗ 先导入运行时（runtime）"); return; }
+        if (!runtime) {
+          toast(externalRuntime
+            ? "✗ 云端模式要靠本地 runtime 进程转发请求；现在接的是外部 Embedding 服务，没法切云端（要么导入 runtime 包，要么继续用外部服务）"
+            : "✗ 先导入运行时（runtime）");
+          return;
+        }
         if (!cloud.endpoint.trim() || !cloud.model.trim() || !cloud.modelSpace.trim()) {
           toast("✗ 先填云端 endpoint / 模型名 / 模型空间");
           return;
