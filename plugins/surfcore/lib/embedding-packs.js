@@ -390,6 +390,11 @@ export function embeddingPacksStatus() {
   const cloud = valid.find((pack) => pack.kind === 'cloud') ?? null;
   const selected = String(config.packId ?? '');
   const service = serviceStatus(config);
+  // 外部发现的服务（本机 llama.cpp / 任何 OpenAI 兼容端点）等价于"运行时已就绪"：
+  // 这种部署没有本地 runtime 包目录，若不显式告诉前端，面板会一直显示"未安装"。
+  const externalRuntime = !runtime && service.ok
+    ? { id: 'external', kind: 'runtime', valid: true, external: true, name: '外部 Embedding 服务', path: '', sizeBytes: 0, url: service.url, source: service.source }
+    : null;
   const cloudConfig = readCloudPackConfig();
   const cloudProviders = Object.fromEntries(Object.entries(cloudConfig.providers || {}).map(([id, profile]) => {
     const index = readVectorIndexMeta(paths, profile.modelSpace);
@@ -397,10 +402,11 @@ export function embeddingPacksStatus() {
   }));
   return {
     ok: true,
-    installed: Boolean(runtime || models.length || cloud),
+    installed: Boolean(runtime || models.length || cloud || externalRuntime),
     root: ROOT,
     packs,
     runtime,
+    externalRuntime,
     models,
     cloud,
     selected,
@@ -412,9 +418,11 @@ export function embeddingPacksStatus() {
     },
     cloudConfig: { ...cloudConfig, providers: cloudProviders },
     service,
-    hint: !runtime && !models.length && !cloud
+    hint: !runtime && !externalRuntime && !models.length && !cloud
       ? '还没有安装 Embedding 包。先装运行时 + 至少一个模型包（或用云端包）。'
-      : (!runtime ? '还没有装运行时包；模型包下载完也不能启动。' : ''),
+      : (!runtime && !externalRuntime
+        ? '还没有装运行时包；模型包下载完也不能启动。'
+        : (externalRuntime ? `正在使用外部 Embedding 服务（${externalRuntime.url}），不需要安装运行时包。` : '')),
   };
 }
 

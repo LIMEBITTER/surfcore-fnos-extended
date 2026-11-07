@@ -6178,6 +6178,8 @@ F("socialV2.voice.ffmpegPath", "ffmpeg 路径", "留空走 PATH", "text", { wide
       const packs = data?.packs ?? [];
       const runtime = packs.find((pack) => pack.valid && pack.kind === "runtime");
       const models = packs.filter((pack) => pack.valid && pack.kind === "model");
+      const externalRuntime = data?.externalRuntime ?? null;
+      const runtimeInstalled = !!runtime || !!externalRuntime;
       const installPath = () => {
         if (!pathInput.trim()) { toast("✗ 先填 zip 路径或已解压目录"); return; }
         act("install", { path: pathInput.trim() }, "安装完成");
@@ -6353,9 +6355,11 @@ F("socialV2.voice.ffmpegPath", "ffmpeg 路径", "留空走 PATH", "text", { wide
             packLine({
               key: "runtime",
               title: "运行时（runtime）",
-              sub: runtime ? `已安装 · ${fmtBytes(runtime.sizeBytes || 0)}` : "导入文件：surfcore-embedding-runtime.zip",
-              installed: !!runtime,
-              status: runtime ? (data.service?.ok ? "运行中" : "已安装") : "未安装",
+              sub: runtime
+                ? `已安装 · ${fmtBytes(runtime.sizeBytes || 0)}`
+                : (externalRuntime ? `使用外部服务 · ${externalRuntime.url}` : "导入文件：surfcore-embedding-runtime.zip"),
+              installed: runtimeInstalled,
+              status: runtimeInstalled ? (data.service?.ok ? "运行中" : "已安装") : "未安装",
               onStart: runtime && !data.service?.ok ? () => act("start", {}, "运行时启动中") : null,
               onStop: runtime && data.service?.ok ? () => act("stop", {}, "运行时已停止") : null,
             })),
