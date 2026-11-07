@@ -22,8 +22,10 @@ assert.ok(!/#[0-9a-f]{3,8}/i.test(modal), '.qbw-modal 不允许写死颜色');
 for (const token of ['--qbw-surface', '--qbw-text', '--qbw-muted', '--qbw-line', '--qbw-brand']) {
   assert.ok(css.includes(`${token}:`), `缺少主题变量 ${token}`);
 }
-assert.ok(css.includes('var(--dsw-alias-bg-overlay') && css.includes('var(--dsw-alias-label-primary'),
-  '--qbw-* 必须映射 DSH 主题 token');
+// 表面色以前用 bg-overlay，但它在深色主题是 #61666b（面板/弹窗发亮），
+// 2026-11-07 改用层级色 bg-layer-1；断言随之改成检查层级色 + 前景色。
+assert.ok(css.includes('var(--dsw-alias-bg-layer-1') && css.includes('var(--dsw-alias-label-primary'),
+  '--qbw-* 必须映射 DSH 主题 token（表面用 bg-layer-1，前景用 label-primary）');
 
 // 3) 禁止未限定作用域的固定浅色文字覆盖（会污染所有页面）
 const globalLightText = [/^\.qbw-hint\{color:#/m, /^\.qbw-chip\{background:rgba\(255,255,255/m];

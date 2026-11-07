@@ -38,4 +38,12 @@ for (const h of hexInCss) {
     `CSS 里出现了意料之外的颜色 ${h}`);
 }
 
+
+// 5. 深色下不能拿「浮层」色当面板底色：bg-overlay 在深色是 #61666b（很亮），
+//    面板/弹窗/页脚应该用层级色（bg-layer-1/2）或极淡的语义混合色。
+const surfaceDecl = /--qbw-surface:\s*([^;]+);/.exec(css);
+assert.ok(surfaceDecl, '--qbw-surface 应有声明');
+assert.doesNotMatch(surfaceDecl[1], /bg-overlay/, '--qbw-surface 不能用 bg-overlay（深色下过亮）');
+assert.match(surfaceDecl[1], /bg-layer-1/, '--qbw-surface 应使用 bg-layer-1');
+
 console.log('✅ console-theme: 调色板挂在 body、全部走 --dsw-* token、无写死浅色');
