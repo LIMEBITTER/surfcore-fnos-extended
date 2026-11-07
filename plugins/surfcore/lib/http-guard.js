@@ -42,6 +42,16 @@ export function readBody(req, limit = 512 * 1024) {
  * 浏览器无法伪造 Host，所以这一层挡得住网页；挡不住本机进程——那一层由
  * DSH 的 `connection.requestRejection`（设置页 API）与 `x-pet-token`（桌宠 API）负责。
  */
+/**
+ * 本机补丁（2026-11-01，0.8.4 重新应用）：可选的精确 Host 白名单。
+ * 默认仍然只有回环；SURFCORE_TRUSTED_HOSTS 只接受整串匹配（含端口），不支持通配。
+ */
+function extraTrustedHosts() {
+  const raw = String(process.env.SURFCORE_TRUSTED_HOSTS ?? '').trim();
+  if (!raw) return [];
+  return raw.split(',').map((x) => x.trim().toLowerCase()).filter(Boolean);
+}
+
 export function isLoopbackReq(req) {
   const host = String(req.headers?.host ?? '').trim().toLowerCase();
   if (!host) return false;
@@ -51,7 +61,9 @@ export function isLoopbackReq(req) {
   const name = host.startsWith('[')
     ? (host.includes(']') ? host.slice(0, host.indexOf(']') + 1) : '')
     : host.split(':')[0];
-  return name === '127.0.0.1' || name === 'localhost' || name === '[::1]' || host === '::1';
+  if (name === '127.0.0.1' || name === 'localhost' || name === '[::1]' || host === '::1') return true;
+  // 本机补丁：只做整串精确匹配（含端口），不做后缀/通配
+  return extraTrustedHosts().includes(host);
 }
 
 /**

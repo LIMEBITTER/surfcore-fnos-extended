@@ -206,14 +206,32 @@ const limitsNow = () => freeLimits(config())
 /**
  * 监听失败的日志文本：ReferenceError / TypeError 是程序错误，必须带类型和 stack，
  * 否则会被 catch 吞成一句“监听失败”，像网络故障一样难查。
+ * 2026-11-04（P0-2）：补 e.cause 链 —— Node fetch 只抛 "fetch failed"，
+ * 真正的 ENOTFOUND / ECONNRESET / ETIMEDOUT 在 cause.code 里；不展开就只能猜。
  * 只截断，不写 token/cookie；stack 仅进 plugin.log。
  */
 export function formatListenError(error) {
-  const isProgrammerError = error instanceof ReferenceError || error instanceof TypeError
-  const text = isProgrammerError
-    ? String(error?.stack || error?.message || error)
-    : String(error?.message || error);
-  return text.slice(0, 800);
+  const parts = []
+  const seen = new Set()
+  let cur = error
+  for (let depth = 0; cur && depth < 4; depth += 1) {
+    if (typeof cur === 'object') {
+      if (seen.has(cur)) break
+      seen.add(cur)
+    }
+    const isProgrammerError = cur instanceof ReferenceError || cur instanceof TypeError
+    let text
+    if (isProgrammerError && cur?.stack) {
+      text = String(cur.stack)
+    } else {
+      const code = cur?.code ? `[${cur.code}] ` : ''
+      const where = cur?.hostname ? `${cur.hostname}${cur.port ? `:${cur.port}` : ''} ` : ''
+      text = `${code}${where}${String(cur?.message || cur)}`
+    }
+    if (text && !parts.includes(text)) parts.push(text)
+    cur = cur?.cause
+  }
+  return parts.join(' ← ').slice(0, 1000)
 }
 
 /** 叫醒她时塞进去的那段话（她醒来第一眼看到的就是它） */
@@ -479,6 +497,45 @@ export function startScheduler(ctx, opts) {
   const STATE = path.join(PLATFORM_DIR, 'whale-night.json')
   const CFG_FILE_REF = path.join(dshHome, 'surfcore', 'bili.config.json')     // 监听循环每次重读（改配置立刻生效 ✓）
   const CRED_REF = path.join(ACCOUNT_DIR, 'credentials.json')                // 账号凭证全局共用，不进角色包
+  // ── 评论监听健康（P0-2，2026-11-04）──────────────────────────────────
+  // 为什么单独写文件：dsh.log 没有时间戳，catch 里也只有一句“监听失败”；
+  // fnos-monitor 要能独立判断“连续失败/退避”，不依赖解析日志。
+  const LISTEN_HEALTH_FILE = path.join(dshHome, 'surfcore', 'bili-listen-health.json')
+  const readListenHealth = () => {
+    try { return JSON.parse(fs.readFileSync(LISTEN_HEALTH_FILE, 'utf8')) } catch { return null }
+  }
+  const writeListenHealth = (patch) => {
+    try {
+      const next = { ...(readListenHealth() || {}), ...patch, updatedAt: Date.now() }
+      fs.mkdirSync(path.dirname(LISTEN_HEALTH_FILE), { recursive: true })
+      const tmp = `${LISTEN_HEALTH_FILE}.${process.pid}.tmp`
+      fs.writeFileSync(tmp, JSON.stringify(next, null, 2) + '\n')
+      fs.renameSync(tmp, LISTEN_HEALTH_FILE)
+    } catch {}
+  }
+  const recordListenOk = () => {
+    writeListenHealth({
+      pendingReload: false,
+      consecutiveFails: 0,
+      lastOkAt: Date.now(),
+      lastError: '',
+      backoffUntil: 0,
+    })
+  }
+  const recordListenFail = (error, text) => {
+    const prev = readListenHealth() || {}
+    const fails = Number(prev.consecutiveFails || 0) + 1
+    // 连续失败 3 次后指数退避：1/2/4/8/16/30 分钟封顶，避免每 60 秒锤 B站。
+    const delayMs = fails >= 3 ? Math.min(30 * 60_000, 60_000 * 2 ** Math.min(10, fails - 3)) : 0
+    writeListenHealth({
+      pendingReload: false,
+      consecutiveFails: fails,
+      lastFailAt: Date.now(),
+      lastError: String(text || error?.message || error).slice(0, 500),
+      backoffUntil: delayMs ? Date.now() + delayMs : 0,
+    })
+    return { fails, delayMs }
+  }
   const readState = () => { try { return JSON.parse(fs.readFileSync(STATE, 'utf8')) } catch { return null } }
   const writeState = (o) => {
     try { fs.mkdirSync(path.dirname(STATE), { recursive: true }); fs.writeFileSync(STATE, JSON.stringify(o, null, 2) + '\n') } catch {}
@@ -902,10 +959,15 @@ export function startScheduler(ctx, opts) {
     // 下限 60 秒（2026-10-18 测试期曾临时放宽到 2 秒 ✓ 已还原 ✓ —— B站 接口经不起每 2 秒锤 ✗）
     const interval = Math.max(60, Number(listenerCfg.commentIntervalSec ?? 300)) * 1000
     if (Date.now() - lastListenAt < interval) return
+    // 连续失败后先退避，别每 60 秒锤 B站（P0-2）
+    if (Number(readListenHealth()?.backoffUntil ?? 0) > Date.now()) return
     lastListenAt = Date.now()
+    writeListenHealth({ pendingReload: false, lastAttemptAt: lastListenAt })
     // 「全天」关掉时：只在她醒着的窗口里听（省 token / 更自然 ✓）
     if (!listenerCfg.allDay && !inWindow(cfg)) return
     listening = true
+    let ok = false
+    let failure = null
     try {
       const cred = JSON.parse(fs.readFileSync(CRED_REF, 'utf8'))
       const H = makeHeaders(cred)
@@ -919,6 +981,7 @@ export function startScheduler(ctx, opts) {
       if (String(listenerCfg.scope ?? 'both') !== 'reply') {
         try { items.push(...(await pullFeed('at', { headers: H, pages: 1 })).items) } catch {}
       }
+      ok = true
       // 第一次跑：只把"现在"当基线，不把历史回复全倒一遍 ✓
       if (!since) { writeL({ lastSeen: Math.floor(Date.now() / 1000) }); listening = false; return }
       const fresh = items.filter((x) => Number(x.t) > since && (!listenerCfg.onlyOwner || String(x.mid) === String(cfg.owner?.mid ?? '')))
@@ -964,9 +1027,14 @@ export function startScheduler(ctx, opts) {
       writeL({ lastSeen: Math.max(...fresh.map((x) => Number(x.t))) })
       log(`[bili-whale] 监听命中 ${fresh.length} 条（${who}）→ 已叫醒`)
     } catch (e) {
-      log(`[bili-whale] 监听失败：${formatListenError(e)}`)
+      const text = formatListenError(e)
+      const { fails, delayMs } = recordListenFail(e, text)
+      failure = text
+      const extra = delayMs ? `，退避 ${Math.round(delayMs / 60_000)} 分钟` : ''
+      log(`[bili-whale] 监听失败（${new Date().toISOString()}，连续 ${fails} 次${extra}）：${text}`)
     } finally {
       listening = false
+      if (ok && !failure) recordListenOk()
     }
   }
 
