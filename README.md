@@ -200,7 +200,27 @@ cd plugins/surfcore && npm test
 
 ---
 
-## 9. 故障排查
+## 9. 机器状态（只读）
+
+QQ 侧唯一能碰机器的能力：`mcp__snowluma-host__nas_status`（在 `src/mcp-host-server.js` 注册，采集在 `src/nas-status.js`）。**只读、零 spawn**：只读 `/proc`、`/sys` 和 `statfs`，再对 7 个固定回环端口做一次 TCP 探活（超时 800ms）；不读 `config.json`、不碰 `.secrets`、不执行任何命令。
+
+被问「NAS 怎么样 / 卡不卡 / 还剩多少空间」时模型调它，再用一两句话概括（人设里写死了「只给结论，不贴原始输出」）：
+
+```
+系统 FN-EVO4-82ED（Debian GNU/Linux 12 (bookworm)，内核 6.18.18.c1186-trim）已运行 6小时23分
+CPU 16 线程，负载 2.66 2.56 2.49
+温度 x86_pkg_temp 40°C，acpitz 28°C
+内存 31.1G 总/可用 26.7G，交换 4.0G 总/剩 4.0G
+磁盘 / 96.9G 用 18.3G（19%），/vol1 473.9G 用 17.3G（4%）
+网络 bond1 192.168.31.22，tailscale0 100.93.159.123
+服务 DSH✓ 桥接控制台✓ SnowLuma 面板✓ noVNC✓ OneBot HTTP✓ OneBot WS✓ 代理✓
+```
+
+**为什么不直接放开本地工具**：QQ 消息是不可信输入，提示注入能借 `pwsh`/写文件做到任意操作；「机器现在什么情况」是只读快照，单独做成一个窄工具，风险可控。通用本地工具继续在 `qq-tool-restrict.mjs` 里 restrict，人设规则 1/3 同步写死这条唯一例外。
+
+---
+
+## 10. 故障排查
 
 | 症状 | 原因 | 处理 |
 | --- | --- | --- |

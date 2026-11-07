@@ -25,6 +25,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import { renderNasStatus } from './nas-status.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '..');
@@ -87,6 +88,23 @@ server.tool(
         + (hc.homeDir ? '' : ' 若 config.json 的 snowluma.httpUrl 与实际端口不一致，也请一并检查。');
     }
     return { content: [{ type: 'text', text: JSON.stringify(payload, null, 2) }] };
+  }
+);
+
+server.tool(
+  'nas_status',
+  '读取这台 NAS 的运行状态（只读快照）：系统与内核、运行时长、CPU 线程与负载、温度、内存与交换、磁盘占用（/ 与 /vol1）、网卡地址、各服务端口是否在听。不读文件内容、不返回任何令牌或路径细节，也不能修改任何东西。被问到「NAS 现在什么情况/机器怎么样/卡不卡/还有多少空间」时先调用它，再用一两句话概括，不要原样贴出整段。',
+  {},
+  async () => {
+    try {
+      const text = await renderNasStatus();
+      return { content: [{ type: 'text', text }] };
+    } catch (error) {
+      return {
+        content: [{ type: 'text', text: `读取 NAS 状态失败：${String(error?.message ?? error)}` }],
+        isError: true
+      };
+    }
   }
 );
 
