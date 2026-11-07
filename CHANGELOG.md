@@ -6,6 +6,7 @@
 - 保留本 fork 的 Linux / fnOS 适配：`SURFCORE_BROWSER`、`xdg-open`、`PLATFORM_UNSUPPORTED`、`/browse/list`、`PathPickerModal`、Linux 解压/递归复制更新、扫码登录浏览器发现。
 - 保留 QQ/B站手动工具、`resolveBiliAid`、`guardTimeClaims`、`like.mjs`。
 - 保留本机补丁：`http-guard.js` 的 `SURFCORE_TRUSTED_HOSTS` 精确 Host 白名单；B站监听 cause 链/健康文件/退避；游戏名全角冒号匹配与 dynamic 记录导入。
+- 按「冲突优先上游」恢复 prompt 的 `【当前时间】` 注入；fork 仅保留出口 `guardTimeClaims` 安全网。
 - 版本统一为 `0.8.9-linux`；README 平台仍为 Linux，目标 DSH 仍为 `0.2.1-rc.5`。
 - 网盘资源入口采用上游统一弹窗；补齐 Linux `/resources/open` 的 `xdg-open` 支持，保留复制链接兜底。
 - `release/install-manifest.json` 在合并提交后重新生成。

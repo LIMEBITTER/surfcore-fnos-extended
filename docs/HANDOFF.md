@@ -21,6 +21,7 @@
 
 - 接受上游 v0.8.9：向量记忆、会话滚动、token ledger、wake filter/batch、SnowLuma 启动、更新锁、发布清单校验。
 - 保留 fork：`SURFCORE_BROWSER`、`xdg-open`、`PLATFORM_UNSUPPORTED`、`/browse/list`、`PathPickerModal`、`qq_bili_*`、`resolveBiliAid`、`guardTimeClaims`、Linux 解压/递归复制更新、`like.mjs`。
+- 冲突处理：prompt 时间注入改用上游 `【当前时间】`；`guardTimeClaims` 作为出口安全网保留（不再注入 `【钟】`/锚点）。
 - 网盘入口采用上游统一弹窗，并在 `openExternalResourceUrl` 补 Linux `xdg-open`；复制链接兜底保留。
 
 ### 下一步

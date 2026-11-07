@@ -49,9 +49,8 @@ QQ 私聊可直接让 agent 操作 B站（仅主人私聊，复用四本账额�
 
 ### 时间与可靠性
 
-- 时钟注入在 prompt **末尾**（一行 `【钟】…`），避免每条消息的时间变化破坏前面静态 prompt 的缓存；
-- 有“几点/多久/还有/睡/今天/明天”等意图时，才追加“距下一个整点/半点”和写前检查（省 token）；
-- 发送前本地 `time-guard`：识别“还有 X 分钟到 H 点半”“现在 HH:MM”等表达，用服务器时间重算；
+- prompt 时间注入采用上游 `【当前时间】…`（随环境时区），不再由 fork 改写；
+- 发送前保留本地 `time-guard`：识别“还有 X 分钟到 H 点半”“现在 HH:MM”等表达，用服务器时间重算；
   错的就地改写，历史/计划句跳过，校验异常 fail-open，不阻断消息；
 - 不做时间工具/二次模型/自动重试：零额外模型调用、零网络，适合高可用。
 
@@ -132,7 +131,7 @@ sudo apt install chromium            # B站 扫码登录前置
   - `listen.oncePerPerson: true`（同一人每天最多 1 条）
   - `listen.dmScope: "owner"`（私信只叫醒主人）
   - `dynamics` / `share` 不在此列，保持原设置。
-- **时间准确性**：时钟在 prompt 末尾注入，发送前有本地 `time-guard`；见 `docs/cases/2026-11-02-time-accuracy.md`。
+- **时间准确性**：prompt 时间用上游注入；发送前保留本地 `time-guard`；见 `docs/cases/2026-11-02-time-accuracy.md`。
 
 ## 常用检查
 

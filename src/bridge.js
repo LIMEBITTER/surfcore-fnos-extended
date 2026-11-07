@@ -13,7 +13,7 @@ import crypto from 'node:crypto';
 import { execFile, execFileSync } from 'node:child_process';
 import yaml from 'js-yaml';
 import { extractPresetPrefix, presetPromptBlockers, presetPromptWarnings, renderPresetPromptYaml } from './preset-prompt.js';
-import { formatClock, formatAnchors, needsTimeDetail, guardTimeClaims } from './time-context.js';
+import { guardTimeClaims } from './time-context.js';
 import { GEN1_ROLE_LINE_RE, parseRoleSections, roleCharStats, roleSectionReport, selectRoleText } from './role-card.js';
 import { fileURLToPath } from 'node:url';
 import { SnowLumaWebSocketClient, text } from '@snowluma/sdk';
@@ -3175,18 +3175,13 @@ async function main() {
 
   function withSlangContext(promptText) {
     const now = new Date();
-    const parts = [];
+    const timeLine = `【当前时间】${now.toLocaleString('zh-CN', { hour12: false })}（${Intl.DateTimeFormat().resolvedOptions().timeZone}）`;
+    const parts = [timeLine];
     if (cfg.slang?.enabled !== false) {
       const block = buildSlangContext(slangEntries, cfg.slang?.injectMax ?? 8);
       if (block) parts.push(block);
     }
-    // 时钟放在 prompt 末尾：既离生成最近，又不会让每条消息的时间变化
-    // 破坏前面大段静态内容的缓存前缀（token/延迟都更省）。
-    const detail = needsTimeDetail(promptText);
-    const timeTail = formatClock(now) + (detail
-      ? `\n${formatAnchors(now)}\n【写前检查】涉及“现在/还有多久/几点”必须按上面的钟算；算不出就写“快 X 了”，不要编分钟数。`
-      : '');
-    return [...parts, String(promptText), timeTail].filter(Boolean).join('\n\n');
+    return parts.join('\n\n') + '\n\n' + promptText;
   }
 
   // 身份对齐置顶：只对群聊注入（私聊不需要，也避免把群成员映射带进私聊）。

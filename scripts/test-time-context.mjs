@@ -58,6 +58,9 @@ console.log('✅ time-context: clock/anchors/guard 全部通过');
 const bridgeSource = fs.readFileSync(new URL('../src/bridge.js', import.meta.url), 'utf8');
 assert.match(
   bridgeSource,
-  /import\s*\{[^}]*\bformatClock\b[^}]*\bformatAnchors\b[^}]*\bneedsTimeDetail\b[^}]*\bguardTimeClaims\b[^}]*\}\s*from\s*['"]\.\/time-context\.js['"]/s,
-  'src/bridge.js 必须导入 time-context 的 formatClock/formatAnchors/needsTimeDetail/guardTimeClaims',
+  /import\s*\{[^}]*\bguardTimeClaims\b[^}]*\}\s*from\s*['"]\.\/time-context\.js['"]/s,
+  'src/bridge.js 必须导入 time-context 的 guardTimeClaims',
 );
+// 2026-11-07：按「冲突优先上游」恢复上游的 prompt 时间注入；fork 只保留出口 guard。
+assert.match(bridgeSource, /【当前时间】/, 'src/bridge.js 应使用上游的【当前时间】注入');
+assert.doesNotMatch(bridgeSource, /【钟】/, 'src/bridge.js 不应再使用 fork 的【钟】注入');
