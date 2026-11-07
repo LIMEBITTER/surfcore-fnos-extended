@@ -292,8 +292,11 @@ export function apply(ctx) {
     components: () => {
       const list = [];
       const updCfg = readUnified().config?.updates ?? {};
-      // 1) SurfCore 本体：源码树，走 git
-      list.push({ id: 'surfcore', name: 'SurfCore 本体', dir: QQBOT_ROOT, kind: 'git', branch: 'main', versionRepo: 'Mieksido/surfcore' });
+      // 1) SurfCore 本体：源码树，走 git。
+      // 分支不能写死 main：fnOS Extended 默认分支是 linux，写死 main 会让 git fetch 失败
+      // （fatal: couldn't find remote ref main），进而退化成版本号比对并误报「有新版」。
+      // 留空交给 inspectGitComponent 用当前检出分支（git rev-parse --abbrev-ref HEAD）。
+      list.push({ id: 'surfcore', name: 'SurfCore 本体', dir: QQBOT_ROOT, kind: 'git', branch: '', versionRepo: 'Mieksido/surfcore' });
       // 2) 语音包**不进入自动更新列表**：它是离线运行时/模型/vendor 包，
       //    不是 SurfCore 那种代码 zip；统一 updateFromZip 会按 surfcore-* + package.json
       //    解析而必然失败（2026-10-30 用户反馈）。需要新包时在「语音」页重新导入离线包，
