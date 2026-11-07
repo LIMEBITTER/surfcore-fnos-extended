@@ -207,7 +207,8 @@ if (KIND === 'best') {
   const bad = []
   if (KIND === 'game') {
     if (!GAMES.includes(game)) bad.push(`轮换的游戏名异常：${game}`)
-    if (!text.includes(game)) bad.push(`标题/简介里没有「${game}」`)
+    // 2026-11-06 补：B站官方名写作「崩坏：星穹铁道」（全角冒号），整串匹配会漏
+    if (!text.replace(/[：:]/g, '').includes(game)) bad.push(`标题/简介里没有「${game}」`)
     if (!hasKindSignal('game', text)) bad.push('标题/简介里没有 AI 二创的信号')
   } else if (KIND === 'anime' && !hasKindSignal('anime', text)) {
     bad.push('标题/简介里没有动漫/MAD/新番的信号')

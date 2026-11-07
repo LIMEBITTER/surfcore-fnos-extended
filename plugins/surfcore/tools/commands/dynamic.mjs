@@ -9,7 +9,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import crypto from 'node:crypto'
 // 2026-10-21 补：line 99 用到 gate 却没 import，发动态会 ReferenceError
-import { gate } from '../lib/quota-gate.mjs'
+import { gate, record } from '../lib/quota-gate.mjs'
 import { assertInteractEnabled } from '../lib/interact.mjs'
 import { assertOutboundIdentitySafe } from '../lib/outbound-guard.mjs'
 
