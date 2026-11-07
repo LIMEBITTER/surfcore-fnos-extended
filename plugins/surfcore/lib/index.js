@@ -764,6 +764,9 @@ export function apply(ctx) {
         dshMode = unwrapSchemaValue(row?.value?.mode) ?? null;
       }
     } catch {}
+    // 2026-11-07：安装位置检测结果直接进概览。Docker 部署的 launcherPath 是空的，
+    // 设置页「当前安装目录」只认它就会显示「未设置」，实际程序在容器里、data 目录在宿主上。
+    const snowFound = findSnowLumaInstall();
     return {
       ok: true,
       version: VERSION,
@@ -787,7 +790,9 @@ export function apply(ctx) {
         launcherPath: String(snow.launcherPath ?? ''),
         allowLaunch: snow.allowLaunch === true,
         downloadUrl: String(snow.downloadUrl ?? 'https://github.com/SnowLuma/SnowLuma/releases/latest'),
-        detected: findSnowLumaInstall().ok,
+        detected: snowFound.ok,
+        detectedKind: snowFound.ok ? snowFound.kind : '',
+        detectedPath: snowFound.ok ? snowFound.root : '',
         everConnected: bridge?.snowluma?.everConnected === true,
         diagnosis: snowDiag,
       },
@@ -2155,6 +2160,8 @@ ${body}`;
       path.join(root, 'app', 'launcher.bat'),
       path.join(root, 'launcher.bat'),
       path.join(root, 'SnowLuma.exe'),
+      path.join(root, 'launcher.sh'),
+      path.join(root, 'app', 'launcher.sh'),
     ];
     return candidates.find((file) => { try { return fs.existsSync(file); } catch { return false; } }) ?? '';
   }
@@ -2175,17 +2182,23 @@ ${body}`;
     // 于是探活永远失败 → 弹窗永远说「控制台还没起来」，「加载 QQ 账号」整条流程不可用。
     let host = '127.0.0.1';
     let port = 0;
-    const root = String(cfg.launcherPath ?? '').trim();
-    if (root) {
+    // 2026-11-07：Docker 部署没有 launcherPath（程序跑在容器里），运行配置在挂出来的 data 目录，
+    // 所以 homeDir 也要当根目录试一遍，否则读不到真实端口（回退 5100，实际是 5099）。
+    const roots = [
+      String(cfg.launcherPath ?? '').trim(),
+      String(cfg.homeDir ?? '').trim(),
+    ].filter(Boolean);
+    for (const root of roots) {
       for (const rel of [['config', 'runtime.json'], ['app', 'config', 'runtime.json']]) {
         try {
           const runtime = JSON.parse(fs.readFileSync(path.join(root, ...rel), 'utf8'));
           if (Number(runtime?.webuiPort) > 0) port = Number(runtime.webuiPort);
           const runtimeHost = String(runtime?.webuiHost ?? '').trim();
           if (runtimeHost && runtimeHost !== '0.0.0.0' && runtimeHost !== '::') host = runtimeHost;
-          if (port > 0) break;
         } catch {}
+        if (port > 0) break;
       }
+      if (port > 0) break;
     }
     const explicitPort = Number(cfg.webuiPort);
     if (Number.isFinite(explicitPort) && explicitPort > 0) port = explicitPort;
@@ -2452,14 +2465,27 @@ ${body}`;
       return { ok: true, skipped: true, message: '测试环境：跳过打开 SnowLuma' };
     }
     const cfg = readQqConfig().config?.snowluma ?? {};
-    if (cfg.allowLaunch !== true) {
-      return { ok: false, error: '未开启「允许插件打开 SnowLuma」：设置 → SurfCore → QQ → SnowLuma' };
-    }
     const webui = snowLumaWebui();
 
     // 已登录（OneBot 3000/3001 在听）：什么都不用做，也别弹窗口。
     if (await portOpen(3000) || await portOpen(3001)) {
+      // 这条分支什么都不启动，只是回报"已经在跑"，所以放在 allowLaunch / 平台判断之前：
+      // Docker 部署本来就不设 allowLaunch，也会走到这里。
       return { ok: true, already: true, opened: false, message: 'SnowLuma 已在运行且已登录' };
+    }
+
+    // 非 Windows：容器或原生包都不由插件拉起，直接给可执行的提示（比"未开启允许插件打开"有用）。
+    if (process.platform !== 'win32') {
+      return {
+        ok: false,
+        code: 'PLATFORM_UNSUPPORTED',
+        error: '当前系统不支持由插件启动 SnowLuma（Windows 才用 launcher.bat / SnowLuma.exe）',
+        hint: 'Linux / Docker 请在宿主执行：docker compose up -d（WebUI 默认 http://127.0.0.1:5099）',
+      };
+    }
+
+    if (cfg.allowLaunch !== true) {
+      return { ok: false, error: '未开启「允许插件打开 SnowLuma」：设置 → SurfCore → QQ → SnowLuma' };
     }
 
     // 进程在、但 OneBot 没起 → 多半停在登录页：直接把 WebUI 打开让人扫码。
@@ -2475,14 +2501,6 @@ ${body}`;
       };
     }
 
-    if (process.platform !== 'win32') {
-      return {
-        ok: false,
-        code: 'PLATFORM_UNSUPPORTED',
-        error: '当前系统不支持直接启动 SnowLuma（Windows 才用 launcher.bat / SnowLuma.exe）',
-        hint: 'Linux 请用 Docker：cd ~/snowluma && docker compose up -d（WebUI 默认 http://127.0.0.1:5099）',
-      };
-    }
     const launcher = resolveSnowLumaLauncher();
     if (!launcher) {
       return { ok: false, error: '找不到 SnowLuma 启动脚本：请在设置里填「SnowLuma 安装目录」或「启动脚本」' };
@@ -3499,8 +3517,27 @@ if ($d.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { ${writeOut('$
         json(res, 200, { ok: false, code: report.code, title: report.title, error: report.error, hint: report.hint, tried: report.tried });
         return;
       }
+      // 按部署形态分别落配置：Windows 包记 launcherPath 并允许插件拉起；
+      // Linux 原生包记 launcherPath + 启动脚本（Linux 上 launchSnowLuma 会明确回 PLATFORM_UNSUPPORTED）；
+      // Docker/容器部署只记 homeDir —— 容器归 docker 管，插件不该假装能"启动"它。
+      if (found.kind === 'data') {
+        saveQqConfig({ snowluma: { homeDir: found.root } });
+        json(res, 200, {
+          ok: true, found: true, kind: 'data', path: found.root, launcher: '',
+          message: `已找到 SnowLuma 数据目录（Docker/容器部署）：${found.root}`,
+        });
+        return;
+      }
+      if (found.kind === 'linux') {
+        saveQqConfig({ snowluma: { launcherPath: found.root, launchScript: found.launcher, allowLaunch: false } });
+        json(res, 200, {
+          ok: true, found: true, kind: 'linux', path: found.root, launcher: found.launcher,
+          message: `已找到 SnowLuma（Linux 原生包）：${found.root}`,
+        });
+        return;
+      }
       saveQqConfig({ snowluma: { launcherPath: found.root, allowLaunch: true } });
-      json(res, 200, { ok: true, found: true, path: found.root, launcher: found.launcher, message: `已找到 SnowLuma：${found.root}` });
+      json(res, 200, { ok: true, found: true, kind: 'windows', path: found.root, launcher: found.launcher, message: `已找到 SnowLuma：${found.root}` });
       return;
     }
     if (action === 'stop') { json(res, 200, await stopBridge()); return; }

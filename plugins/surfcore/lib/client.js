@@ -1222,9 +1222,9 @@ F("sessionCwd", "会话工作目录", "留空用 surfcore 根目录", "text", { 
         F("snowluma.followDiscoveredEndpoint", "跟随自发现端点", "网关换端口时自动跟随", "switch"),
         F("snowluma.silenceWarnMs", "静默告警阈值（ms）", "多久没事件包就警告", "number", { min: 60000 }),
         F("snowluma.allowLaunch", "允许插件打开 SnowLuma", "默认关；开启后一键启动会弹出 SnowLuma 窗口，仍需你扫码", "switch"),
-        F("snowluma.launcherPath", "SnowLuma 安装目录", "解压出来的根目录（里面有 app）；例如 D:/Tools/SnowLuma2", "text", { browse: "dir" }),
+        F("snowluma.launcherPath", "SnowLuma 安装目录", "Windows：解压出来的根目录（里面有 app）；Linux 原生包：launcher.sh 所在目录；Docker 部署留空，直接填下面的 SnowLuma home", "text", { browse: "dir" }),
         F("snowluma.launchScript", "启动脚本（可选）", "留空自动找 安装目录\\app\\launcher.bat", "text", { wide: true }),
-        F("snowluma.homeDir", "SnowLuma home（app 目录）", "内含 config 的那个目录，一般是 安装目录 下的 app；填错会导致「检测不到」", "text", { browse: "dir" }),
+        F("snowluma.homeDir", "SnowLuma home / 数据目录", "内含 config 的那个目录：Windows 原生包是 安装目录/app，Linux 原生包是安装根目录，Docker 部署是挂出来的 data 目录（如 /vol1/1000/snowluma-docker/data）", "text", { browse: "dir" }),
         F("snowluma.webuiPort", "控制台端口（可选）", "留空自动读 config/runtime.json；读不到才回退 5100", "number", { min: 1, max: 65535 }),
         F("snowluma.webuiUrl", "控制台地址（可选）", "例如 http://127.0.0.1:5099；填了优先于端口", "text", { wide: true }),
         F("snowluma.launchMode", "启动方式", "detached=隐藏并脱离 DSH 进程树（推荐）；legacy=旧窗口，DSH 退出会一起结束", "select", { options: [["detached", "隐藏 + 脱离 DSH（推荐）"], ["legacy", "旧方式（可见窗口）"]] }),
@@ -2676,7 +2676,10 @@ F("toolsPath", "bili.mjs 路径", "留空 = 用合体插件自带的 tools/", "t
                   `SnowLuma 连接异常（${snow.diagnosis.state}）：${snow.diagnosis.hint || "请检查 SnowLuma 是否运行并已登录"}`)
                 : null,
               h("p", null, "第一次使用：下载官方 SnowLuma2 → 解压 → 点「检测已安装的 SnowLuma」→ 启动 QQ 并扫码。"),
-              h("div", { className: "qbw-kv" }, h("span", null, "当前安装目录"), h("span", null, snow.launcherPath || "未设置")),
+              h("div", { className: "qbw-kv" }, h("span", null, "当前安装目录"), h("span", null, snow.launcherPath || snow.detectedPath || "未设置")),
+              h("div", { className: "qbw-kv" }, h("span", null, "检测结果"), h("span", null, snow.detected
+                ? `已找到（${snow.detectedKind === "data" ? "Docker/容器部署" : (snow.detectedKind === "linux" ? "Linux 原生包" : "Windows 包")}）`
+                : "未检测到")),
               h("div", { className: "qbw-actions" },
                 h(Btn, { kind: "qbw-btn2", onClick: () => window.open(snow.downloadUrl || "https://github.com/SnowLuma/SnowLuma/releases/latest", "_blank", "noopener") }, "打开官方下载页"),
                 h(Btn, { onClick: () => detectSnowLuma(), disabled: !!busy }, "检测已安装的 SnowLuma"),
@@ -2684,7 +2687,7 @@ F("toolsPath", "bili.mjs 路径", "留空 = 用合体插件自带的 tools/", "t
                 h(Browse, { mode: "dir", title: "选择 SnowLuma2 解压出来的根目录（里面有 app）", onPick: (picked) => detectSnowLuma(picked) }),
                 h(Btn, { kind: "qbw-btn2", onClick: () => act("start-snowluma"), disabled: !!busy }, "只打开 SnowLuma"),
                 h(Btn, { kind: "qbw-btn3", onClick: () => act("stop-snowluma"), disabled: !!busy }, "关闭 SnowLuma")),
-              h("div", { className: "qbw-hint" }, "检测只会在常见位置里猜。装在别处（例如 D:\软件\SnowLuma2）就点「手动选择已安装的 SnowLuma」，选 SnowLuma.exe 或 app\launcher.bat（也可以直接选解压根目录）。"),
+              h("div", { className: "qbw-hint" }, "检测只会在常见位置里猜。装在别处（例如 D:\软件\SnowLuma2、/vol1/1000/snowluma、/vol1/1000/snowluma-docker/data）就点「手动选择已安装的 SnowLuma」：Windows 选 SnowLuma.exe 或 app\launcher.bat，Linux 原生包选 launcher.sh，Docker 部署选 data 目录（里面有 config/runtime.json）。"),
               h("div", { className: "qbw-hint" }, "「手动选择」只是告诉插件你装好的 SnowLuma 在哪：不下载、不安装、不移动、不删除任何文件。"),
               h("div", { className: "qbw-hint" }, "SurfCore 只负责检测、打开和查看连接状态；SnowLuma2 本体按 EULA 不随插件分发，安装与扫码仍需你完成。")),
             h("div", { className: "qbw-card" },
