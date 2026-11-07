@@ -1,196 +1,239 @@
 # SurfCore · fnOS Extended
 
-> 一台 NAS，一个住在 DSH 里的 agent，和两个它常去的入口：QQ 与 B站。
+DSH（DeepSeek Harness）上的 QQ / B站 agent 插件。本仓库是 [Mieksido/surfcore](https://github.com/Mieksido/surfcore) 的 `linux` 分支：保留上游的人格、记忆、QQ 桥接与 B站 能力，只替换掉「只能在 Windows 成立」的那部分，并把飞牛 OS（fnOS）上的部署经验固化成脚本与文档。
 
-这是 [Mieksido/surfcore](https://github.com/Mieksido/surfcore) 的 Linux / 飞牛 OS 分支。
-
-上游把“人格、记忆、QQ 桥接”这些通用能力做得挺完整；这个仓库做的事更具体一点：让它在飞牛的角落里真的住下来——能扫码登录，能打开链接，能更新，能在 QQ 里聊着聊着顺手去 B站点个赞。
-
-**先说清楚**：这是自用分支，不是上游的替代品。通用问题优先看上游文档；这个仓库只负责 Linux 上多出来的那部分，以及我自己踩过的坑。
+上游文档仍然有效；这里只写本分支的差异、部署方式和踩过的坑。
 
 | 项 | 值 |
 | --- | --- |
-| 版本 | `0.8.9-linux` |
-| 目标 DSH | `0.2.1-rc.5`（已实测；`npm run verify:adaptation` 可逐项复核） |
-| 平台 | Linux / 飞牛 OS |
-| 许可 | MIT（SnowLuma 是第三方专有运行时，**不随本仓库分发**） |
-| 配套仓库 | [surfvoicelocal](https://github.com/Mieksido/surfvoicelocal) · [surfvoicecloud](https://github.com/Mieksido/surfvoicecloud) · [surfpet](https://github.com/Mieksido/surfpet) |
+| 版本 | `0.8.9-linux`（见 `plugins/surfcore/package.json`） |
+| DSH | 实机验证 `0.2.2-rc.1`；兼容基线 `0.2.1-rc.5` |
+| Node | ≥ 22.13（`engines.node`） |
+| 平台 | Linux x64 / fnOS；Windows 不是本分支目标平台 |
+| 许可 | MIT（SnowLuma 为第三方专有运行时，不随本仓库分发） |
+| 配套 | [surfvoicelocal](https://github.com/Mieksido/surfvoicelocal) · [surfvoicecloud](https://github.com/Mieksido/surfvoicecloud) · [surfpet](https://github.com/Mieksido/surfpet) |
 
-## 这一版有什么
+---
 
-`0.8.9-linux` 跟上了上游 v0.8.9，也保留了 fork 自己的东西。
+## 1. 它由哪些进程组成
 
-- **向量记忆**：本地 runtime 或云端 embedding，多模型独立索引，记忆库可读可搜；本地模型有 bge-small、qwen3、bge-m3 几档。
-- **会话滚动**：上下文太长时在下一轮投递前换会话，默认关闭，开了会先告诉你代价。
-- **Token 账本**：QQ、B站、黑话、子会话分开记账，额度和提醒都落在本地。
-- **唤醒过滤 / 批量**：减少不必要的唤醒，也减少“明明没事却被叫起来”的情况。
-- **SnowLuma 启动**：脱离 DSH Job，DSH 更新不会顺手把它带走。
-- **Linux 适配**：扫码浏览器发现、`xdg-open`、`unzip` 更新、递归复制、语音包平台拒绝，都是为这台机器改的。
+`surfcore` 不是一个独立服务，而是一个 **DSH profile bundle**：DSH 启动时加载它，它再拉起桥接进程、注册 MCP server、挂一个控制台页面。
 
-合并上游时有个原则：**同一个功能如果上游已经有一版，优先用上游**；fork 只留 Linux 必需的适配，和上游确实没有的增量。上一轮就把 prompt 的时间注入换回了上游写法，本地只保留发送前的 `time-guard` 兜底。不是赌气重写，是尽量少养一套自己的分支逻辑。
+```
+QQ 用户
+  │  QQ 协议
+  ▼
+SnowLuma（容器，注入 Linux QQ NT）      WebUI :5099   noVNC :6081
+  │  OneBot v11：HTTP :3000 / WS :3001（容器内监听 0.0.0.0，宿主只发布到 127.0.0.1）
+  ▼
+src/bridge.js（QQ 桥接：唤醒、预设、额度、时间校验、B站 工具）
+  │  DSH Web API（会话 / 模型 / 事件）
+  ▼
+DSH（profile `feiyu`）  Web UI :3080
+  ├─ MCP server：mcp-snowluma-safe / mcp-snowluma-host / mcp-web-search-safe（stdio 子进程）
+  └─ 控制台 API  :3100（console-token 鉴权）
+```
 
-## Linux 上具体改了什么
+三个要点：
 
-- **扫码登录**：自动找 `chromium / chrome / edge / brave / snap`，也可以用 `SURFCORE_BROWSER` 指定；`--headless=new` 不行就退回 `--headless`；浏览器按进程组退出，不留孤儿。
-- **打开链接**：只走 `xdg-open`。NAS 没桌面时它会安静地失败，不会把进程带崩。
-- **语音包**：安装用 `tar` + `chmod`；启动/停止在 Linux 返回 `PLATFORM_UNSUPPORTED`，并给出手动 `python -m voxd` 的命令。
-- **更新**：解压用 `unzip`，应用更新用递归复制。不再依赖 PowerShell 和 robocopy。
-- **路径选择**：设置页里的“浏览…”走页面内选择器，不依赖 Windows 原生文件对话框；也可以直接粘贴绝对路径。
+1. **桥接进程由 DSH 插件自己拉起**（`plugins/surfcore/lib/bridge.js` 里 `spawn(node, ['src/bridge.js'], { detached: true })`）。不需要手工 `npm start`；外部再起一份只会抢 `state/bridge.lock` 和 3100 端口。
+2. **SnowLuma 必须在容器内监听 `0.0.0.0`**，因为宿主 `127.0.0.1:3000/3001` 是 docker-proxy 转发到容器网段的。宿主机只发布到回环，隔离由端口映射完成。
+3. **QQ 侧的工具面被收窄**：`plugins/surfcore/qq-tool-restrict.mjs` 用「前缀白名单 + 精确名单」限制 QQ 会话能调用的工具，只有 `mcp__snowluma__*` / `mcp__snowluma-host__*` / `mcp__web-search-safe__*` 和少数内置工具可用。
 
-Windows 不是这个分支的目标平台。仓库里可能还留着上游的 PowerShell 脚本，但主线只保证 Linux。
+---
 
-## B站 × QQ
+## 2. 前置条件
 
-QQ 私聊里可以直接让 agent 操作 B站。只允许主人私聊，复用现有额度账本、出站身份闸和审计。
-
-| 工具 | 能做什么 |
+| 依赖 | 说明 |
 | --- | --- |
-| `qq_bili_search` | 搜视频 |
-| `qq_bili_video` | 视频详情 / 字幕 |
-| `qq_bili_feed` | 按偏好选题 |
-| `qq_bili_like` | 点赞 |
-| `qq_bili_post` | 发动态 / 发评论，`dryRun` 可预览 |
+| Node ≥ 22.13 | 用户级安装即可，不需要 root |
+| DSH + 一个 profile | `dsh --profile <name> --dump-config` 能跑通 |
+| pnpm | `dsh plugin --profile <name> install` 需要它，缺了会 `退出码 127` |
+| SnowLuma | 官方 Docker 镜像 `motricseven7/snowluma:latest`（含 Linux QQ + Xvfb + noVNC） |
+| Chromium/Chrome | 仅 B站 扫码登录需要；可用 `SURFCORE_BROWSER` 指定绝对路径 |
 
-入口在：设置 → SurfCore → B站 → **「QQ 手动工具（B站）」**。总开关、工具说明、最近操作记录都在那里。
+---
 
-评论会先把 BV 解析成 `aid(oid)` 再提交；失败返回结构化错误，不把 CLI 的 usage 直接甩给用户。
+## 3. 安装
 
-## 时间这件事
-
-时间错了，比“不知道”更麻烦。所以这里有两层：
-
-1. prompt 里的时间用上游的 `【当前时间】…`，跟着环境时区走；
-2. 发送前本地再过一遍 `time-guard`：识别“还有 X 分钟到 H 点半”“现在 HH:MM”这类表达，用服务器时间重算。错的就地改写，历史/计划句跳过，校验异常就 fail-open，不拦消息。
-
-不做时间工具、不二次调模型、不自动重试。零额外模型调用，零网络，图的就是稳。
-
-## 怎么装
-
-> 如果你是把仓库交给 DSH 自己部署，让它先读 [`README.DSH.md`](README.DSH.md)：那是一份按“检查 → 安装 → 重启 → 验收”写的 agent runbook。
-
-前置：Node ≥ 22.13、DSH 能打开 Web GUI、SnowLuma 已经用 Docker 跑起来、装一个 Chromium（扫码登录用）。
-
-### 一键（推荐）
+### 3.1 一键
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/LIMEBITTER/surfcore-fnos-extended/linux/scripts/bootstrap.sh | bash
+curl -fsSL https://raw.githubusercontent.com/LIMEBITTER/surfcore-fnos-extended/linux/scripts/bootstrap.sh -o /tmp/surfcore-bootstrap.sh
+bash /tmp/surfcore-bootstrap.sh --check    # 只体检，不装
+bash /tmp/surfcore-bootstrap.sh            # 真装
 ```
 
-它会检查 Node、DSH profile、SnowLuma 端口，拉代码、装依赖、执行 `setup-dsh.mjs`，最后生成 `config.json`。它**不会**替你重启 DSH，重启这一步留给你。
+脚本按顺序做五件事：检查 Node / `$DSH_HOME/profiles` / git / 3000、3001 端口 → `git clone --branch linux` 到 `~/surfcore`（可用 `SURFCORE_DIR` 覆盖）→ `npm install`（顺带跑 `patch-snowluma-sdk.mjs`）→ `node scripts/setup-dsh.mjs <profile>` → 生成 `config.json`（已存在则不动）。
 
-只想先看看环境对不对：
+它**不会重启 DSH**，重启留给你。
 
-```bash
-bash scripts/bootstrap.sh --check
-```
-
-### 手动
+### 3.2 手动
 
 ```bash
 git clone --branch linux https://github.com/LIMEBITTER/surfcore-fnos-extended.git ~/surfcore
 cd ~/surfcore
 
 npm install
-node scripts/setup-dsh.mjs nas       # 换成你的 DSH profile 名
+node scripts/detect-profile.mjs          # 拿 profile 名
+node scripts/setup-dsh.mjs <profile>     # 注册 bundle / preset / MCP，并跑 dsh plugin install
 ```
 
-然后按你的 DSH 安装方式重启 DSH。重启后：DSH → 设置 → **SurfCore** → 诊断 → 一键安装。
+顺序不能反：**先 `npm install`，再 `setup-dsh`，最后重启 DSH**。反过来容易报 `Cannot find module '@deepseek-ai/schemastery'`。
+
+`setup-dsh.mjs` 会写这些地方：
+
+- `<profile>/package.json`：`dsh.profile.bundles` 追加 `surfcore`，`dependencies` 加 `link:` 
+- `<profile>/cordis.patch.yml`：写入 3 条 MCP（带 `# === qq-bridge MCP BEGIN/END ===` 标记，可重复执行）
+- `$DSH_HOME/plugins/surfcore`：指向本仓库 `plugins/surfcore` 的软链
+
+---
+
+## 4. 配置
+
+运行时配置是 `config.json`（仓库只给 `config.example.json`，**不要整体覆盖**用户数据）。
+
+| 键 | 作用 | 备注 |
+| --- | --- | --- |
+| `dsh.baseUrl` | DSH Web API 地址 | 默认 `http://127.0.0.1:3080` |
+| `snowluma.wsUrl` / `httpUrl` | OneBot 端点 | 容器部署写 `127.0.0.1`，不要写 `0.0.0.0` |
+| `snowluma.homeDir` | SnowLuma 数据目录 | Docker 部署指向挂出来的 `data/`，桥接靠它找 `config/onebot_<uin>.json` 的 token |
+| `snowluma.followDiscoveredEndpoint` | 是否跟随发现到的端点 | 容器部署建议 `false`，否则会把 `ws://0.0.0.0:3001` 写回配置 |
+| `ownerQQ` / `allow.private` / `allow.groups` | 谁能用 | `allow.groups` 留空 = 不接群聊；`allowAllWhenEmpty` 保持 `false` |
+| `consolePort` / `consoleToken` | 控制台 | token 留空则自动生成到 `state/console-token` |
+| `biliBridge.manual.enabled` | QQ 里手动用 B站 工具 | 默认关；关着一律 403 |
+| `chat.proactive.enabled` / `social.proactiveEnabled` | 主动搭话 | 默认建议关 |
+| `purpose.enabled` | 主动找话题引擎 | 默认关 |
+
+环境变量：
+
+| 变量 | 用途 |
+| --- | --- |
+| `SURFCORE_BROWSER` | 扫码登录用的浏览器绝对路径 |
+| `SURFCORE_TRUSTED_HOSTS` | 控制台 API 的额外合法 Host（逗号分隔，含端口，精确匹配） |
+| `SNOWLUMA_HOME` | 覆盖 SnowLuma 目录（等价于 `snowluma.homeDir`，双保险） |
+| `DSH_HOME` / `DSH_PROFILE` | DSH 目录与 profile 名 |
+| `DSH_INSTALL_MODULES` | 校验脚本用的 DSH 依赖目录 |
+
+敏感文件统一收紧到 600（`config.json`、`state/console-token`、SnowLuma 的 `onebot_*.json`、B站 凭据）：
 
 ```bash
-sudo apt install chromium            # B站扫码登录前置
+npm run harden-acl      # 幂等，Windows 走 icacls，Linux 走 chmod
 ```
 
-> 顺序别反：先 `npm install`，再 `setup-dsh`，最后重启。否则容易报 `Cannot find module '@deepseek-ai/schemastery'`。
+---
 
-## 装完怎么确认
+## 5. Linux 上具体改了什么
+
+| 能力 | 上游（Windows） | 本分支（Linux） |
+| --- | --- | --- |
+| 启动 / 重启 / 停止 | `start.bat` / `restart.bat` / PowerShell | `start.sh`（带崩溃重启循环）、`restart.sh`（防双实例）、`stop-qq-bot.sh [--all]` |
+| 扫码浏览器 | `chrome.exe` 固定路径 | 依次探测 `chromium` / `chromium-browser` / `chrome` / `edge` / `brave` / `/snap/bin/chromium`，可用 `SURFCORE_BROWSER` 覆盖 |
+| 打开链接 | `start` / `rundll32` | `xdg-open`，**先查存在性再 spawn**，并对子进程挂 `error` 监听（否则 ENOENT 会带走桥接进程） |
+| 端口 / 进程发现 | `netstat -ano` + `tasklist` | `ss -ltnp` → `netstat -ltnp` → `netstat -ltn`；进程名读 `/proc/<pid>/comm` 与 `/proc/<pid>/cmdline` |
+| Node 发现 | `C:\Program Files\nodejs\node.exe` | `PATH` → `/usr/bin` → `/usr/local/bin` → `~/.local/{bin,node/bin}` → `~/.nvm/current/bin` |
+| 文件权限 | `icacls` | `chmod 700/600`，失败降级并打印手动命令 |
+| 更新落地 | PowerShell + robocopy | `unzip` + 递归复制 |
+| 语音包 | Windows venv + `.bat` | 安装用 `tar` + `chmod`；启停在 Linux 明确返回 `PLATFORM_UNSUPPORTED` 并给手动命令 |
+| 行尾 | — | `.gitattributes` 固定 `*.sh eol=lf` / `*.bat|cmd|ps1 eol=crlf` |
+
+控制台样式有一条约定的规则：**主题色板必须挂在 `body` 上**。DSH 的 `--dsw-alias-*` 定义在 `body` / `body[data-ds-dark-theme]`，写在 `:root` 里会取不到值、退回硬编码浅色（深色主题下就是白底深字）。`scripts/test-console-theme.mjs` 会把这条钉死。
+
+---
+
+## 6. 运维
+
+| 项 | 值 |
+| --- | --- |
+| DSH Web UI | `127.0.0.1:3080`（需要一次性 token 链接换 Cookie） |
+| 控制台 API | `127.0.0.1:3100`（`x-console-token`） |
+| SnowLuma WebUI / noVNC | `:5099` / `:6081` |
+| OneBot | `127.0.0.1:3000`（HTTP）/ `127.0.0.1:3001`（WS） |
+| 桥接日志 | `state/bridge.log` |
+| 手动操作审计 | `state/bili-manual-log.jsonl` |
+| 状态接口 | `GET /api/status`（控制台 token） |
 
 ```bash
-npm run verify:adaptation
-npm run test:audit
-npm run test:regressions
+./start.sh                 # 前台监护（崩了 5 秒后重启，退出码 2 = 已有实例）
+./restart.sh               # 先停干净再拉起，残留则中止
+./stop-qq-bot.sh --all     # 停桥接 + 顺带停 SnowLuma
+
+npm run verify:adaptation  # 与 DSH 版本逐项对表
+node scripts/test-linux-adaptation.mjs
+node scripts/test-console-theme.mjs
 cd plugins/surfcore && npm test
 ```
 
-当前基线：`test:audit` **155/155**，回归和插件测试全过，`release/install-manifest` 769 个文件、0 问题。
+`npm run verify:adaptation` 里那 6 项红字是**仓库侧漂移**，不影响功能：preset suffix 少了 `{{cwd}}`（DSH 0.2.1-rc.2 之后不再注册该变量）、守卫名单里含 DSH 已改名的工具、3 个 MCP 的 `serverInfo.version` 还写着 `0.2.0-r4`。
 
-设置页 → SurfCore → 诊断，也能一项项看。QQ 和 B站的开关在 B站 页的「QQ 手动工具（B站）」里。
+---
 
-## 数据都放在哪
+## 7. 数据都在哪
 
 | 内容 | 路径 |
 | --- | --- |
-| 插件运行配置 | `~/surfcore/config.json`（600，本机） |
-| B站 配置 | `~/.dsh/surfcore/bili.config.json` |
-| 角色 / 人格 / 记忆 / B站 账本 | `~/.dsh/surfcore/characters/<角色ID>/` |
-| B站 手动操作审计 | `~/surfcore/state/bili-manual-log.jsonl` |
+| 插件运行配置 | `~/surfcore/config.json`（600） |
+| 控制台 token | `~/surfcore/state/console-token` |
+| B站 配置 / 凭据 | `~/.dsh/surfcore/bili.config.json`、`~/.dsh/surfcore/bili/credentials.json`（600） |
+| 角色 / 人格 / 记忆 / 账本 | `~/.dsh/surfcore/characters/<角色ID>/` |
 | 角色卡示例 | `roles/`（脱敏） |
 
-常用环境变量：
+仓库**不含**真实账号、群号、Cookie 或记忆数据；运行时数据只在本机。
 
-- `SURFCORE_BROWSER`：指定扫码用浏览器
-- `SURFCORE_TRUSTED_HOSTS`：公网反代的 Host 白名单（仓库提供精确匹配支持，具体 Host 由部署环境变量提供）
-- `SURFCORE_SKIP_AUTOSTART=1`：跳过自动打开浏览器
+---
 
-仓库里**不含**任何真实账号、群号、Cookie 或记忆数据。运行时数据只在本机。
+## 8. B站 × QQ
 
-## 钱、限额和压缩
+入口：DSH → 设置 → SurfCore → B站 → 「QQ 手动工具（B站）」。总开关 `biliBridge.manual.enabled`，只有**主人私聊**能用。
 
-> 这一节是自用部署的备忘，不是仓库默认值。换机器或重装 DSH 后要重新设。
+| 工具 | 能力 | 写操作 |
+| --- | --- | --- |
+| `qq_bili_search` | 搜索视频 | 否 |
+| `qq_bili_video` | 视频详情 / 字幕 | 否 |
+| `qq_bili_feed` | 按偏好选题 | 否 |
+| `qq_bili_like` | 点赞 | 是（可逆） |
+| `qq_bili_post` | 发动态 / 评论 | 是（`dryRun` 可预览） |
 
-- **DSH 自动压缩**：`~/.dsh/profiles/<profile>/cordis.patch.yml`
-  ```yaml
-  - id: compaction-basic
-    config:
-      thresholdRatio: 0.35   # 约 36.7 万触发（窗口 1,048,576）
-      retainRatio: 0.1       # 保留约 10.5 万
-  ```
-  QQ 会话大约 20 万，低于阈值，不会被压缩；B站长会话 34–58 万，会触发。
-- **B站回复限额**：`~/.dsh/surfcore/bili.config.json`
-  - `limits.replyDaily: 10`（回复总量/天）
-  - `listen.oncePerPerson: true`（同一人每天最多 1 条）
-  - `listen.dmScope: "owner"`（私信只叫醒主人）
-  - `dynamics` / `share` 不在这条线里，保持原设置。
-- **时间准确性**：prompt 用上游注入，发送前保留 `time-guard`；细节在 `docs/cases/2026-11-02-time-accuracy.md`。
+额度与审计：发布 10 次/天、点赞 50 次/天，全部落 `state/bili-manual-log.jsonl`。评论会先把 BV 解析成 `aid(oid)` 再提交，失败返回结构化错误。
 
-## 常用命令
+扫码登录走本机浏览器 + CDP：打开 `passport.bilibili.com/login`，取**可见**二维码，轮询 `SESSDATA / bili_jct / DedeUserID`，写进凭据文件（`target=fish` 与 `target=owner` 分开存）。二维码约 170 秒过期。
 
-```bash
-npm run test:audit                              # 全量回归
-npm run test:regressions                        # 关键回归
-node scripts/release-manifest.mjs --verify-ref HEAD
-node scripts/setup-dsh.mjs nas                  # 重新注册到 DSH
-node scripts/sync-upstream.mjs --dry-run        # 只看上游有没有新东西
-```
+---
 
-- 诊断页：DSH → 设置 → SurfCore → 诊断
-- 审计：`tail -f state/bili-manual-log.jsonl`
-- 上游同步：`npm run sync:upstream`；默认走 `fork/linux`，不碰 `upstream` 的 push 地址
+## 9. 故障排查
 
-## 文档
+| 症状 | 原因 | 处理 |
+| --- | --- | --- |
+| 控制台「只接受本机回环访问」403 | 经反代/局域网访问，Host 不在白名单 | 设 `SURFCORE_TRUSTED_HOSTS=<host:port>` 后重启 DSH |
+| `dsh plugin ... 退出码 127` / `spawn pnpm ENOENT` | 没装 pnpm | `npm i -g pnpm` 后重跑 `setup-dsh.mjs` |
+| `Cannot find module '@deepseek-ai/schemastery'` | 装了插件没装依赖，或顺序反了 | 先 `npm install`，再 `setup-dsh`，最后重启 |
+| 3100 被占 / 桥接起两份 | 旧的 `src/bridge.js` 还活着 | `./stop-qq-bot.sh` 后 `./start.sh` |
+| `SnowLuma 连接断开（code=1006）` | token 读不到：`homeDir` 指错，或端点被写成 `0.0.0.0` | `snowluma.homeDir` 指向 `data/`；`followDiscoveredEndpoint=false` |
+| 「检查更新」显示「本地有未提交改动」 | 自动检查的快照（启动 20 秒后一次，之后每 6 小时） | 提交后手动点一次「检查更新」 |
+| 扫码登录找不到浏览器 | 机器上没有 Chromium | 装 Chromium 或设 `SURFCORE_BROWSER` |
+| 深色主题白底深字 | 色板写在 `:root`，取不到 `body` 上的 `--dsw-*` | 挂 `body`，跑 `test-console-theme.mjs` |
 
-- 部署与运维：`docs/guides/INSTALL.md`
-- 架构：`docs/guides/ARCHITECTURE.md`
-- B站 子系统：`docs/guides/SUBSYSTEM-BILI.md`
-- 踩坑记录：`docs/PITFALLS.md`
-- 改动案例：`docs/cases/README.md`
-- Linux 适配案例：`docs/cases/2026-11-01-linux-adaptation.md`
+---
 
-## 安全与边界
+## 10. 开发约定
 
-- QQ B站 工具只允许**主人私聊**；群聊和其他人一律拒绝。
-- B站 发布走额度闸 + 出站身份闸，不泄露 QQ 号 / B站 mid；手动操作有日上限和审计。
-- AI 发语音默认关闭（`socialV2.voice.enabled=false`）；`qq_send_voice` / `qq_list_voices` 只有启用后才可用。
-- 不含桌宠 / Electron 组件；不代扫码、不代替用户登录。
-- 公网访问（Lucky 反代 + `SURFCORE_TRUSTED_HOSTS`）仓库提供精确 Host 匹配支持，默认不启用；具体值放在部署环境里，不写进仓库。
+- 只在本仓库提 Issue / PR；**不向上游 `Mieksido/surfcore` 提交任何 Issue 或 PR**，`upstream` 只读。
+- 分支：`linux`。同步上游用 `npm run sync:upstream`（默认走 `fork/linux`）。
+- 提交信息：`fix(scope): …` / `feat(scope): …` / `docs: …`，正文写清「现象 → 根因 → 修复 → 验证」。
+- 改行为就要带回归测试；改控制台样式必须跑 `node scripts/test-console-theme.mjs` 与 `plugins/surfcore` 的 `npm test`。
+- 版本号后缀 `-linux`，发版按 `docs/RELEASE.md`。
 
-## 仓库规则
+---
 
-- 这是 `LIMEBITTER` 的独立 fork；**只在本仓库提 Issue/PR，不向上游 `Mieksido/surfcore` 提交任何 Issue 或 PR**。
-- 上游只读：`git push upstream` 已禁用；同步上游用 `scripts/sync-upstream.mjs` 手动执行。
-- 版本号后缀 `-linux`；发版按 `docs/RELEASE.md` 处理。
+## 11. 更多文档
 
-## 许可
+- 交给 agent 自己部署：[`README.DSH.md`](README.DSH.md)（检查 → 安装 → 重启 → 验收的 runbook）
+- 部署与运维细节：`docs/guides/INSTALL.md`
+- 架构：`docs/guides/ARCHITECTURE.md`；B站 子系统：`docs/guides/SUBSYSTEM-BILI.md`
+- 踩坑记录：`docs/PITFALLS.md`；变更案例：`docs/cases/`
+
+---
+
+## 12. 许可
 
 MIT，保留上游版权声明。上游：[Mieksido/surfcore](https://github.com/Mieksido/surfcore)。
-
-如果这个分支帮你少踩了一个坑，那就够了。
