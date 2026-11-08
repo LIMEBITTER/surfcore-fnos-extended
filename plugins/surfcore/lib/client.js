@@ -1937,43 +1937,20 @@ F("toolsPath", "bili.mjs 路径", "留空 = 用合体插件自带的 tools/", "t
           })()),
           h("p", { style: { fontSize: "12px", color: "var(--qbw-warn-text)", marginTop: "2px" } },
             "⚠️ 下载/更新完成后需要完全退出 DSH 再打开才会生效；只刷新设置页不会应用。"),
-          (() => {
-            // 更新通道：正式用户 stable（默认）；测试机才切 dev（只跟 -dev.N 预发布）
-            const ch = status?.channel === "dev" ? "dev" : "stable";
-            const switchChannel = async (next) => {
-              if (next === ch) return;
-              setWorking(true);
-              try {
-                const r = await api("/updates", { method: "POST", body: { action: "set-channel", channel: next } });
-                if (!r.ok) throw new Error(r.error || "切换通道失败");
-                toast(`✓ 已切到${next === "dev" ? "测试" : "稳定"}通道；正在重新检查…`);
-                onDone?.();
-              } catch (e) { toast(`✗ ${e.message}${e.hint ? `；${e.hint}` : ""}`); }
-              finally { setWorking(false); }
-            };
-            return h("div", { style: { display: "flex", gap: "8px", alignItems: "center", marginTop: "6px", flexWrap: "wrap" } },
-              h("span", { className: "qbw-label", style: { margin: 0 } }, "更新通道"),
-              h("select", { className: "qbw-select", value: ch, disabled: working, onChange: (e) => switchChannel(e.target.value) },
-                h("option", { value: "stable" }, "stable（正式版，默认）"),
-                h("option", { value: "dev" }, "dev（测试版，只给测试机）")),
-              h("span", { className: "qbw-hint" }, ch === "dev"
-                ? "只安装 vX.Y.Z-dev.N 的 Pre-release；正式用户不要开。"
-                : "只安装正式 Release；Pre-release 不会打扰你。"));
-          })(),
           pending.length ? pending.map((item) => h("div", { key: item.id, style: { border: "1px solid rgba(127,127,127,.24)", borderRadius: "10px", padding: "10px 12px", margin: "0 0 8px" } },
             h("label", { style: { display: "flex", gap: "8px", alignItems: "center", fontWeight: 600 } },
               h("input", { type: "checkbox", checked: selected.has(item.id), onChange: () => toggle(item.id), disabled: working }),
               item.name,
               h("span", { className: "qbw-chip", style: { marginLeft: "auto" } },
-                item.channel === "version" || item.channel === "dev"
-                  ? `v${item.installedVersion} → ${fmtV(item.latestVersion)}${item.channel === "dev" ? "（测试通道）" : ""}`
+                item.channel === "version"
+                  ? `v${item.installedVersion} → ${fmtV(item.latestVersion)}`
                   : item.channel === "release"
                     ? `${item.installedVersion ? `v${item.installedVersion}` : "未安装"} → ${fmtV(item.latestVersion)}`
                     : (item.latestVersion
                       ? `v${item.installedVersion || "?"} → ${fmtV(item.latestVersion)}（${item.behind} 个提交）`
                       : `${item.behind} 个提交（到 ${String(item.remote || "").slice(0, 7)}）`))),
             h("div", { className: "qbw-hint", style: { marginTop: "4px" } },
-              `${item.dir} · ${item.branch ?? ""}${item.dirty ? ` · ⚠️ 本地有 ${item.dirty} 处改动` : ""}${item.ahead ? ` · ⚠️ 本地领先 ${item.ahead}` : ""}${Number(item.asset?.size) > 0 ? ` · 安装包 ${sizeText(item.asset.size)}` : (item.channel === "dev" || item.channel === "version" ? " · 包大小未知（GitHub 归档）" : "")} · ${item.channel === "release" ? "版本清单" : item.channel === "version" ? "版本追踪" : item.channel === "dev" ? "测试通道（Pre-release）" : "git 仓库"}`),
+              `${item.dir} · ${item.branch ?? ""}${item.dirty ? ` · ⚠️ 本地有 ${item.dirty} 处改动` : ""}${item.ahead ? ` · ⚠️ 本地领先 ${item.ahead}` : ""}${Number(item.asset?.size) > 0 ? ` · 安装包 ${sizeText(item.asset.size)}` : (item.channel === "version" ? " · 包大小未知（GitHub 归档）" : "")} · ${item.channel === "release" ? "版本清单" : item.channel === "version" ? "版本追踪" : "git 仓库"}`),
             item.blocked ? h("div", { className: "qbw-hint", style: { color: "var(--qbw-err-text)" } }, `不能自动更新：${item.blocked}`) : null,
             item.blocked ? h("div", { className: "qbw-hint" }, "处理办法：本仓库有未提交改动时，先 commit/stash 再更新；或者直接用新版本的 zip 覆盖安装。") : null,
             (item.changelog ?? []).length ? h("ul", { style: { margin: "6px 0 0 18px", padding: 0, fontSize: "11.5px", lineHeight: "18px", opacity: 0.82 } },
@@ -2284,21 +2261,6 @@ F("toolsPath", "bili.mjs 路径", "留空 = 用合体插件自带的 tools/", "t
         } catch (e) {
           toast(`✗ 检查更新失败：${e.message}`);
           return null;
-        } finally { setBusy(""); }
-      };
-      // 更新通道：main/stable 只跟正式 Release；dev 只跟 -dev.N 的 Pre-release（测试机才用）
-      const switchUpdateChannel = async (channel) => {
-        if ((updates?.channel ?? "stable") === channel) return;
-        setBusy("channel");
-        try {
-          const r = await api("/updates", { method: "POST", body: { action: "set-channel", channel } });
-          if (!r.ok) throw new Error(r.error || "切换通道失败");
-          toast(channel === "dev"
-            ? "✓ 已切到 dev 测试通道（只装 -dev.N 构建）；正检查更新…"
-            : "✓ 已切回 main 稳定通道（只装正式 Release）");
-          await checkUpdates();
-        } catch (e) {
-          toast(`✗ ${e.message}${e.hint ? `；${e.hint}` : ""}`);
         } finally { setBusy(""); }
       };
       // 插件冲突体检：只读扫描；结果必须带“未覆盖项”，不能把“没查到”说成“兼容”。
@@ -2797,19 +2759,8 @@ F("toolsPath", "bili.mjs 路径", "留空 = 用合体插件自带的 tools/", "t
                       "此版本无法自动更新：手动下载")
                     : null),
               h(Btn, { kind: "qbw-btn2", onClick: () => setUpdateOpen(true), disabled: !(updates.results ?? []).length }, "查看详情"))),
-          h("div", { style: { display: "flex", gap: "14px", alignItems: "center", marginTop: "8px", flexWrap: "wrap" } },
-            h("span", { className: "qbw-label", style: { margin: 0 } }, "更新通道"),
-            ...[["stable", "main（正式版，默认）"], ["dev", "dev（测试版，只给测试机）"]].map(([value, label]) =>
-              h("label", { key: value, style: { display: "inline-flex", gap: "5px", alignItems: "center", cursor: busy ? "default" : "pointer", fontSize: "12.5px" } },
-                h("input", {
-                  type: "radio", name: "update-channel", value,
-                  checked: (updates.channel ?? "stable") === value,
-                  disabled: !!busy,
-                  onChange: () => switchUpdateChannel(value),
-                }), label)),
-            h("span", { className: "qbw-hint" }, (updates.channel ?? "stable") === "dev"
-              ? "只安装 vX.Y.Z-dev.N 的 Pre-release；正式用户不要选。"
-              : "只安装正式 Release；Pre-release 不会打扰你。")),
+          h("div", { className: "qbw-hint", style: { marginTop: "8px" } },
+            "更新通道：正式版（只跟正式 Release；不再提供 dev 测试通道）"),
           h("div", { style: { marginTop: "8px", paddingTop: "8px", borderTop: "1px solid rgba(127,127,127,.18)" } },
             h("div", { className: "qbw-hint" },
               updates.githubTokenConfigured

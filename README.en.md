@@ -1,168 +1,187 @@
-# SurfCore — QQ ↔ DeepSeek Harness Bridge + QQ × Bilibili plugin
+# SurfCore · fnOS Extended
 
-> 🍴 **This repository is [LIMEBITTER/surfcore-linux](https://github.com/LIMEBITTER/surfcore-linux) — a personal fork of [Mieksido/surfcore](https://github.com/Mieksido/surfcore).**
-> Upstream is read-only here: commits, branches and pull requests stay inside this fork — nothing is pushed, proposed or merged back upstream.
-> Fork-only differences, the `feat/qq-bili-tools` branch and the upstream-sync recipe are documented in [十一、Fork 说明](README.md#十一fork-说明).
+A QQ / Bilibili agent plugin for [DSH (DeepSeek Harness)](https://github.com/deepseek-ai/dsh). This is the Linux / fnOS branch of [Mieksido/surfcore](https://github.com/Mieksido/surfcore): it keeps personas, memory, the QQ bridge and Bilibili features, while replacing Windows-only startup, browser, path and permission logic.
 
-> ℹ️ This English page is a **condensed overview**. The full, code-level documentation
-> (architecture, every module, voice / pet / Bilibili subsystems, configuration and state files,
-> capability boundaries) is written in Chinese under [`docs/guides/`](docs/guides/) —
-> start with [`ARCHITECTURE.md`](docs/guides/ARCHITECTURE.md).
+> Branch: `linux`. Updates follow formal Releases only — there is no dev channel.
 
-> Connect QQ messages to DeepSeek Harness (DSH) agents: QQ friends/groups become DSH conversations, and agent replies (including questions and tool approvals) are sent back to QQ.
->
-> 🧩 The merged DSH plugin lives in **[plugins/surfcore/](plugins/surfcore/README.md)** and appears in DSH settings as **SurfCore** (QQ settings + Bilibili browsing + two-way redacted memory + identity alignment). Since 2026-10-22 the former `QQbot` and `刷B站/dsh-bili-whale` workspaces are merged into this repository.
+| Item | Value |
+| --- | --- |
+| Version | `0.8.9.1-linux` |
+| DSH | verified on `0.2.2-rc.1`; baseline `0.2.1-rc.5` |
+| Node | ≥ 22.13 |
+| Platform | Linux x64 / fnOS |
+| License | MIT; SnowLuma is third-party proprietary and not bundled |
 
-> ⚠️ **Current release `0.1.0` (SurfCore merged edition; it carries the bridge code of qq-bridge `v0.2.0-r4`), verified on DSH `0.2.1-rc.2`** (run `npm run verify:adaptation` to re-check item by item against your own DSH). It uses the persistent local signing key to **mint the session Cookie offline**, slash RPC endpoints and the `/api/remote.mux` event stream — a protocol generation introduced in DSH `0.1.2-alpha.1`, incompatible with the older dot-endpoint protocol. Reading the launch token out of the old guard logs has not worked since DSH 0.1.7 (the token is generated per process and never written to disk). Agent presets are `@deepseek-ai/dsh-agent-preset` Cordis rows since DSH 0.1.7 (the `~/.dsh/.agent-presets/` directory mechanism is gone). On **DSH `0.1.1-rc.2` or earlier**, use tag [`v0.1.0`](https://github.com/Derpyu520/qq-bridge/releases/tag/v0.1.0); for **DSH 0.1.5-rc.1** use [`v0.1.5`](https://github.com/Derpyu520/qq-bridge/releases/tag/v0.1.5); for **DSH 0.1.7-rc.2** use [`v0.1.7`](https://github.com/Derpyu520/qq-bridge/releases/tag/v0.1.7).
->
-> **r4 highlights**: sticker/animated-emoji pipeline (CDN first, `emoji_id` fallback, multi-address DNS failover), web search now reuses DSH's own DeepSeek search backend (Bing only as fallback), `qq_wait_for_messages` long-polling past the 300 s undici timeout, plus fixes for the mode-switch rollback, permanent "busy" turns, missing self-identity injection and a full-project audit. Details: [Release v0.2.0-r4](https://github.com/Derpyu520/qq-bridge/releases/tag/v0.2.0-r4).
->
-> The default branch `main` **is** this version — a plain `git clone` gets it, no branch switching needed.
+## What it does
 
-For the detailed Chinese guide, start with **[docs/guides/ARCHITECTURE.md](docs/guides/ARCHITECTURE.md)**
-(the 2026-10 code-level documentation set: architecture, every module, voice / pet / Bilibili subsystems,
-configuration & state files, capability boundaries).
-The documentation index (one line per doc, with "still current?" notes) is **[docs/README.md](docs/README.md)**;
-the repository/folder and script-naming conventions are in **[docs/FOLDER_MAP.md](docs/FOLDER_MAP.md)**.
-
-## Architecture
+SurfCore is a DSH profile bundle, not a standalone service. DSH loads it; the plugin starts the QQ bridge, registers MCP servers, and adds a console page inside DSH Web.
 
 ```
-QQ messages ──► SnowLuma (OneBot v11 WS) ──► qq-bridge ──► DSH Web API (127.0.0.1:3080/api)
-                                                    ▲                      │
-                                                    └── agent replies / questions / approvals ┘
+QQ users
+  │
+  ▼
+SnowLuma (Docker: Linux QQ + OneBot)
+  │  HTTP :3000 / WebSocket :3001
+  ▼
+src/bridge.js (wakeups, presets, quotas, Bilibili tools)
+  │  DSH Web API
+  ▼
+DSH (profile chosen at install time)  Web UI :3080
+  └─ console API :3100
 ```
 
-- **QQ side**: `@snowluma/sdk` provides the OneBot v11 WebSocket client.
-- **DSH side**: adapted for DSH 0.1.2+ and **re-verified on 0.2.0-rc.2** — session Cookie minted from the persistent local signing key, `/api/<namespace>/<method>` slash RPC, and `/api/remote.mux` + `session/follow` event stream (the pending queue is read from `value.projections[<id>].values.inbox`, with the unary `session/projections` RPC as the primary path). The per-session model is pinned by the bridge via `session.selectModel` from `config.json`'s `dsh.model` (default `deepseek-flash` = DeepSeek-V41-Flash, multimodal).
-- **Agent tools**: three bundled MCP servers expose a restricted QQ toolset (`qq_status`, `qq_list_groups`, `qq_get_group_history`, `qq_send_group_message`, `qq_reply`, etc.), a read-only host probe (`snowluma_status` only), and a read-only `web_search` / `web_fetch` pair with SSRF protection.
-  ⚠️ **`start_snowluma` / `stop_snowluma` (and `snowluma.allowProcessControl`) were removed in v0.1.5**: SnowLuma EULA §5.4 requires prior written permission to deploy its proprietary native components through automated scripts. This program only probes, never deploys — installing, starting and scanning SnowLuma is always up to you. See [LICENSE](LICENSE) and [RULES.md](RULES.md).
-- **Console**: a local web console at `http://127.0.0.1:3100`, organised into ten task-based pages (Overview, Sessions & Approvals, Persona, Social v2, Social v1, Slang, Usage & Cost, Access & Security, Operations, Tool Reference) with cross-page feature search and a **light / dark theme** (one-click toggle in the header; follows the OS preference until you choose), for mode switching, role management, whitelist/admin settings, slang management, memory, stickers and more. The Persona page manages roles (view/edit/rename/duplicate/delete the prompt of each persona), shows and edits both prompt layers separately — the **simulation prompt** built into the preset (tool/behaviour protocol; synced to DSH, restart required) and the **persona prompt** (`roles/*.md`; applied immediately) — and sets the **DSH reasoning effort** (`max` by default, `high`/`low` selectable). The **Usage & Cost** page shows real-time token consumption and its price in CNY, broken down per group/friend and per conversation turn (see [docs/guides/TOKEN_USAGE_CONSOLE.md](docs/guides/TOKEN_USAGE_CONSOLE.md)).
-
-## Features
-
-- Bridges QQ group/private messages to DSH agent sessions.
-- Social simulation mode ("simulated group friend") with idle/active/probing/exiting states.
-- Space-based message splitting for more natural multi-message replies.
-- Whitelist/blacklist access control, fail-closed by default.
-- Sensitive text audit prevents paths/credentials from being sent to QQ.
-- MCP tools for reading group history/members, sending messages, replying with quotes, and (in `reserved2`) full simulated-group-friend tooling.
-- Slang/network-expression learning with human confirmation.
-- Lightweight memory system for active topics, pending thoughts and member impressions.
-- **Memory cards (the character's long-term memory)**: two cards sharing one document family — the **decayed card** (`memory-card.*`) is the only one loaded into prompts (owner + emotional memories stay vivid, unimportant ones fade one level per day), while the **full archive** (`memory-card-full.*`) keeps every memory permanently vivid and is never injected; it exists for on-demand search/recall via the settings page or `/api/memory-card/full`. Capacity alerts at 80/90/100% with one-click compression apply to the decayed card only; the full archive has a soft cap and is never auto-deleted. Rules and configuration: [docs/guides/MEMORY_CARD.md](docs/guides/MEMORY_CARD.md).
-- **Character personas (multi-character)**: each character is a directory bundle (`~/.dsh/surfcore/characters/<id>/`) with its persona card, decayed/full memory cards, Bilibili behavior ledgers, and snapshots. The settings page can create/load/save/restore/delete characters; loading another character snapshots the old one, stops and restarts the QQ bridge and Bilibili scheduler with fresh sessions, and switches the current pointer with an epoch. Twelve autosave slots (before-switch + 180/90/60/30/15/10/7/5/3/2/1 days); today's actions under the old character never count toward the new one and are never replayed. See [docs/guides/CHARACTER_PERSONA.md](docs/guides/CHARACTER_PERSONA.md).
-- Sticker library integration with AI-friendly sticker usage.
-- **SurfCore plugin**: one settings window for QQ + Bilibili, two-way redacted memory, identity alignment, and the merged "fish school" protection (see below).
-- **Fish-school protection**: QQ groups suppress autonomous participation when the recent window is dominated by other fish bots; Bilibili comments skip new top-level comments when too many fish are present, gather into a fish thread instead, and like fish comments within a low daily cap. Both sides are configurable and can be disabled independently.
+Do not run a second `npm start`; the bridge is started by the plugin. A duplicate only fights over the lock and ports.
 
 ## Requirements
 
-- Node.js >= 22.13
-- Running DeepSeek Harness Web (default `http://127.0.0.1:3080`)
-- Running SnowLuma with OneBot v11 WebSocket and HTTP API enabled
-
-## Quick Start
-
-```bash
-npm install        # postinstall automatically patches the @snowluma/sdk ESM packaging bug
-```
-
-Copy `config.example.json` to `config.json`, then edit:
-
-```bash
-cp config.example.json config.json
-```
-
-Key settings:
-
-| Field | Description |
+| Dependency | Notes |
 | --- | --- |
-| `dsh.baseUrl` | DSH Web API URL, default `http://127.0.0.1:3080` |
-| `dsh.authToken` | DSH launch token (a process-launch credential). **Normally leave this empty**: with no token the bridge mints the session cookie offline from the persistent signing key in `~/.dsh/.credentials.yaml`, which depends on no per-process state (since DSH 0.1.7 the launch token lives only in memory — the one in the old logs belongs to a previous process and only yields a 401). A value here is honoured first if you set one |
-| `dsh.authHeader` / `dsh.authPrefix` | Legacy fields kept for compatibility; the current path uses Cookie auth and does not send this header |
-| `snowluma.wsUrl` | SnowLuma OneBot **WebSocket** URL (e.g. `ws://127.0.0.1:3001`) |
-| `snowluma.accessToken` | OneBot access token, leave empty if not configured |
-| `snowluma.httpUrl` | OneBot **HTTP API** URL (e.g. `http://127.0.0.1:3000`); do not point this at the WebSocket port or you will get HTTP 426 |
-| `ownerQQ` | Administrator QQ (highest privilege) |
-| `allow.private` / `allow.groups` | Whitelist of QQ/group IDs |
-| `deny.users` | Person blacklist (QQ IDs): messages from these users are ignored in **every** group and in private chat (not stored, not fed to the agent, no wake-up, pokes ignored). Beats `allow.*` and `allowAllWhenEmpty` |
-| `deny.private` / `deny.groups` | Conversation blacklist (QQ/group IDs), takes precedence over the whitelist |
-| `consolePort` | Local console port, default `3100` |
+| Node ≥ 22.13 | same user as DSH; do not install as root |
+| DSH + profile | `dsh --profile <name> --dump-config` must work |
+| pnpm | required by `dsh plugin install` |
+| SnowLuma | Docker image `motricseven7/snowluma:latest`; log in yourself |
+| Chromium/Chrome | only for Bilibili QR login; `SURFCORE_BROWSER` can override |
 
-Start:
+## Install
+
+### One command
 
 ```bash
-npm start
+curl -fsSL https://raw.githubusercontent.com/LIMEBITTER/surfcore-fnos-extended/linux/scripts/bootstrap.sh -o /tmp/surfcore-bootstrap.sh
+bash /tmp/surfcore-bootstrap.sh --check
+bash /tmp/surfcore-bootstrap.sh
 ```
 
-Or double-click `start.bat` on Windows (guard mode with auto-restart).
+The script checks Node, the DSH profile, git and common ports, clones the `linux` branch to `~/surfcore` (`SURFCORE_DIR` overrides), runs `npm install`, then `setup-dsh.mjs` to register the bundle / presets / MCP servers. It does not restart DSH.
 
-## DSH Setup on Another Device
-
-The bridge and console can run without extra DSH setup, but the two DSH chat presets (`qq-chat` and `qq-chat-v2`) and the MCP servers must be installed into DSH once per machine:
+### Manual
 
 ```bash
-node scripts/setup-dsh.mjs
+git clone --branch linux https://github.com/LIMEBITTER/surfcore-fnos-extended.git ~/surfcore
+cd ~/surfcore
+npm install
+node scripts/detect-profile.mjs
+node scripts/setup-dsh.mjs <profile>
 ```
 
-This installs:
+`setup-dsh.mjs` rolls back profile changes on failure. Do not retry blindly; fix the original error first.
 
-- the two `@deepseek-ai/dsh-agent-preset` rows (`qq-chat`, `qq-chat-v2`) plus the shared `qq-tool-restrict` safety guard, all inside the `surfcore` bundle
-- MCP entries in `~/.dsh/profiles/web/cordis.patch.yml`
-- only `surfcore` in the profile `package.json` (`bundles` + `link:` dependency)
-- Default DSH mode set to `reserved2` (second-generation simulation), with a local `state/mode.json` fallback
+### SnowLuma
 
-Then restart DSH. See [docs/guides/DSH_SETUP.md](docs/guides/DSH_SETUP.md) for details.
+Run SnowLuma in Docker, publish OneBot HTTP / WebSocket and the WebUI only to loopback or your LAN, and mount its `data/` directory:
 
-## Security Notes
+- WebUI: `http://<host>:5099`
+- OneBot HTTP: `127.0.0.1:3000`
+- OneBot WebSocket: `127.0.0.1:3001`
 
-- `config.json` and `state/` are **never committed**; the repository only ships `config.example.json`. Both are ACL-hardened to the owner / SYSTEM / Administrators (`npm run harden-acl`).
-- MCP send tools enforce whitelist checks and reject CQ-code injection.
-- Local paths, credentials, tokens and other sensitive patterns are filtered by the audit layer.
-- Simulation sessions get **no local execution tools at all**: the preset's `qq-tool-restrict` row hides them from the tool schema at registration time and a runtime allowlist rejects anything outside the QQ MCP namespaces (`npm run scan:tool-names` re-checks that list against the installed DSH).
-- The console uses a generated token when none is configured.
+Log in to QQ in the WebUI. The OneBot token lives in SnowLuma's `data/config/onebot_<uin>.json`; SurfCore reads it via `snowluma.homeDir`.
 
-## Repository Layout
+## Configuration
 
-```
-surfcore/
-  config.example.json   # sanitized config template (real config.json is not in repo)
-  docs/
-    README.md           # documentation index (one line per doc + "still current?" notes)
-    FOLDER_MAP.md       # folder layout and scripts/ naming conventions
-    guides/             # user/operator facing + code-level docs: ARCHITECTURE, MODULE-*, SUBSYSTEM-*, DATA-AND-CONFIG, BOUNDARIES, DSH_SETUP, ...
-    design/             # design & planning docs
-    research/           # investigation notes
-    audits/             # review / optimisation reports
-    legacy/             # archived docs that were superseded
-  dsh/agent-presets/    # qq-chat / qq-chat-v2 DSH agent preset templates
-  plugins/surfcore  # DSH bundle: generates the qq-chat / qq-chat-v2 preset patch rows + the shared tool guard
-  plugins/surfcore       # merged DSH plugin: SurfCore settings window + QQ/Bilibili memory/alignment
-  src/                  # bridge core and MCP servers
-  public/
-    console.html        # local web console
-  roles/                # persona cards
-  assets/               # images (the intro video ships as a release asset, not in the repo)
-  scripts/              # tests and helper scripts
-  state/                # runtime data (not in repo)
-```
+Runtime configuration is `config.json` at the repository root (only `config.example.json` is committed; never overwrite user data wholesale).
 
-## Testing
+| Key | Purpose |
+| --- | --- |
+| `dsh.baseUrl` | DSH Web API, default `http://127.0.0.1:3080` |
+| `snowluma.wsUrl` / `httpUrl` | OneBot endpoints; use `127.0.0.1` for Docker, never `0.0.0.0` |
+| `snowluma.homeDir` | SnowLuma data directory (needed to find the OneBot token) |
+| `snowluma.followDiscoveredEndpoint` | keep `false` for Docker |
+| `ownerQQ` / `allow.*` | who may use it; empty `allow.groups` means no group chats |
+| `consolePort` / `consoleToken` | console; empty token is generated into `state/console-token` |
+| `biliBridge.manual.enabled` | allow manual Bilibili tools from QQ; default off |
 
-`npm run test:audit` runs isolated regression tests without production credentials, DSH, or QQ messages. For what is covered and what is still red, see [docs/RISK_REGISTER.md](docs/RISK_REGISTER.md) and [docs/PITFALLS.md](docs/PITFALLS.md) (Chinese).
+Useful environment variables:
 
-After upgrading, legacy QQ session mappings without permission metadata are recreated once. Mode or preset changes also retire the old mapping and recreate the session on the next message; DSH history is retained.
+| Variable | Purpose |
+| --- | --- |
+| `SURFCORE_BROWSER` | absolute path to the browser used for QR login |
+| `SURFCORE_TRUSTED_HOSTS` | extra exact Host values allowed by the console API |
+| `SNOWLUMA_HOME` | override the SnowLuma directory |
+| `DSH_HOME` / `DSH_PROFILE` | DSH home and profile name |
+
+Tighten sensitive files:
 
 ```bash
-npm run self-test       # DSH-side link test, no QQ/SnowLuma required
-npm run test-md
-npm run test-wait
-npm run test-vision
-npm run test-forward
-npm run test-slang
-npm run test-stickers
+npm run harden-acl
 ```
 
-## Compliance
+## Start and verify
 
-SnowLuma is an independent third-party project and is not affiliated with Tencent/QQ. This project is for learning and technical research only; please follow the relevant terms and the QQ User Agreement.
+Restart DSH after installation. Then:
+
+```bash
+curl -I http://127.0.0.1:3080/          # 401 is expected without a token cookie
+
+TOKEN=$(cat state/console-token)
+curl -s -H "x-console-token: $TOKEN" http://127.0.0.1:3100/api/status
+
+node scripts/self-test.js
+cd plugins/surfcore && npm test
+```
+
+Healthy state:
+
+- DSH Web opens and SurfCore is visible in settings / Plugins.
+- `/api/status` reports `dshReady=true`, `snowluma.connected=true`, `accountOnline=true`, `good=true`.
+- SnowLuma WebUI opens; QQ is logged in; OneBot `:3000/:3001` is listening.
+- The bridge process exists and its log contains `SnowLuma 已连接`.
+
+## Data and logs
+
+| Content | Path |
+| --- | --- |
+| Plugin config | `~/surfcore/config.json` (600) |
+| Console token | `~/surfcore/state/console-token` |
+| Bilibili config / credentials | `$DSH_HOME/surfcore/bili.config.json`, `$DSH_HOME/surfcore/bili/credentials.json` |
+| Characters / memory / ledger | `$DSH_HOME/surfcore/characters/<id>/` |
+| Bridge log | `~/surfcore/state/bridge.log` |
+
+The repository never contains real accounts, group IDs, cookies or memory data.
+
+## Bilibili and night schedule
+
+- Bilibili QR login, watch history, dynamics, comment/private-message listening and manual tools live in the Bilibili section of the settings page.
+- Each night window can target every day, weekdays, weekends, or individual weekdays; a cross-midnight window belongs to its start day.
+- Defaults follow DeepSeek off-peak pricing: weekdays 18:30–24:00, weekends 08:00–24:00 (plus a separate 00:00–01:00 window). Peak hours (weekdays 09:00–12:00 and 14:00–18:00) are not used for scheduled wakeups.
+- `night.maxWakesPerDay` caps wakeups per day: 0 means no wakeup, maximum 12.
+
+## Updates
+
+- Formal Releases only; the dev channel was removed.
+- The root `package.json` is the single source of the version; the plugin package must match.
+- Source installs: `git pull --ff-only origin linux`, then restart DSH. Zip installs: use “Check for updates” in settings.
+- After updating, fully quit and reopen DSH; refreshing the page is not enough.
+
+## Troubleshooting
+
+| Symptom | Fix |
+| --- | --- |
+| Console 403 “loopback only” | set `SURFCORE_TRUSTED_HOSTS=<host:port>` and restart DSH |
+| `dsh plugin ... exit 127` / `spawn pnpm ENOENT` | install pnpm, rerun `setup-dsh.mjs` |
+| `Cannot find module '@deepseek-ai/schemastery'` | run `npm install`, then `setup-dsh`, then restart |
+| SnowLuma `code=1006` | check `snowluma.homeDir`, OneBot token, and that `:3000/:3001` are listening |
+| Bilibili QR login finds no browser | install Chromium or set `SURFCORE_BROWSER` |
+| Button action gives no feedback | 0.8.9.1 adds automatic toasts; attach `state/bridge.log` and the browser console if it still happens |
+
+## Development
+
+```bash
+git checkout linux
+cd plugins/surfcore && npm test
+cd ../.. && npm run test:audit
+npm run test:version
+```
+
+- Do not open issues/PRs against upstream `Mieksido/surfcore`; `upstream` is read-only.
+- Commit messages: `feat(scope): …`, `fix(scope): …`, `docs: …`.
+- Release process: `docs/RELEASE.md`; formal Releases only.
+
+## More docs
+
+- Agent deployment runbook: [`README.DSH.md`](README.DSH.md) (Chinese)
+- Architecture / Bilibili subsystem: `docs/guides/ARCHITECTURE.md`, `docs/guides/SUBSYSTEM-BILI.md`
+- Pitfalls: `docs/PITFALLS.md`; change cases: `docs/cases/`
+
+## License
+
+MIT, with upstream copyright notices. Upstream: [Mieksido/surfcore](https://github.com/Mieksido/surfcore).

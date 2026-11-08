@@ -453,10 +453,10 @@ assert.ok(source.includes('sl.everConnected === false'), '按 everConnected 判�
 assert.ok(source.includes("/dsh/repair"), "设置页要有修复 DSH 注册的入口");
 assert.ok(source.includes("修复 DSH 注册"), "按钮文案要能看懂");
 assert.ok(source.includes("canRepairDsh"), "L2 弹窗遇到 dsh-profile-mcp-missing 要给修复按钮");
-// ── 更新通道单选（2026-11-01）──
-assert.ok(source.includes("update-channel"), "检查更新下面要有 main/dev 单选");
-assert.ok(source.includes("main（正式版") && source.includes("dev（测试版"), "两个通道文案");
-assert.ok(source.includes("switchUpdateChannel"), "切通道要调 set-channel");
+// ── 更新通道：dev 已移除（2026-11-08）──
+assert.ok(!source.includes("update-channel"), "设置页不再有 main/dev 通道单选");
+assert.ok(!source.includes("switchUpdateChannel"), "不再有切通道逻辑");
+assert.ok(source.includes("不再提供 dev 测试通道"), "更新区要明确 dev 测试通道已移除");
 // ── 保存按钮/提示（2026-11-02）──
 assert.ok(source.includes("保存并生效"), "主保存按钮必须明确“保存并生效”");
 assert.ok(source.includes("仅保存（不重启）"), "必须保留明确的“仅保存”次按钮");

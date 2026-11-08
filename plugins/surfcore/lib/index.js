@@ -279,8 +279,8 @@ export function apply(ctx) {
     stateDir: STATE_DIR,
     pluginLog,
     githubToken: () => String(readUnified().config?.updates?.githubToken ?? ''),
-    // 更新通道：stable（默认，只走正式 Release）/ dev（只走 Pre-release 的 -dev.N）
-    channel: () => String(readUnified().config?.updates?.channel ?? 'stable'),
+    // 更新通道：仅正式 Release；dev 测试通道已移除。
+    channel: () => 'stable',
     blockedReason: (component) => {
       if (component.kind === 'pet' || component.id === 'surfpet') {
         try {
@@ -4287,16 +4287,14 @@ if ($d.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { ${writeOut('$
         return;
       }
       const nextChannel = String(body.channel ?? '').trim();
-      if (!['stable', 'dev'].includes(nextChannel)) {
-        json(res, 400, { ok: false, code: 'UPDATE_CHANNEL_INVALID', error: '更新通道只能是 stable 或 dev', hint: '正式用户用 stable；只有测试机才切 dev' });
+      if (nextChannel !== 'stable') {
+        json(res, 400, { ok: false, code: 'UPDATE_CHANNEL_INVALID', error: '仅支持正式版更新通道', hint: 'dev 测试通道已移除；请使用正式 Release' });
         return;
       }
       try {
-        saveUnified({ updates: { channel: nextChannel } });
-        // 切换通道必须清掉上一轮的检查结果：否则 main 通道会被上轮 dev 检查留下的
-        // pending 继续弹窗（2026-11-01 用户要求：选 main 时不被 dev 更新打扰）。
+        saveUnified({ updates: { channel: 'stable' } });
         updates.resetCheck?.();
-        json(res, 200, { ok: true, channel: nextChannel, requiresCheck: true, hint: nextChannel === 'dev' ? '已切到测试通道：会安装 -dev.N 预发布；正式版用户不要开' : '已切回稳定通道：只跟正式 Release' });
+        json(res, 200, { ok: true, channel: 'stable', requiresCheck: true, hint: '已使用正式版通道：只跟正式 Release' });
       } catch (error) {
         json(res, 500, { ok: false, code: 'UPDATE_CHANNEL_SAVE', error: `保存通道失败：${String(error?.message ?? error).slice(0, 160)}`, hint: '检查 config.json 是否可写后重试' });
       }

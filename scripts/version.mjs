@@ -24,6 +24,7 @@ const ROOT_PKG = path.join(ROOT, 'package.json');
 const PLUGIN_PKG = path.join(ROOT, 'plugins', 'surfcore', 'package.json');
 const CHANGELOG = path.join(ROOT, 'CHANGELOG.md');
 const SEMVER = /^(\d+)\.(\d+)\.(\d+)(?:-(rc|beta|alpha|dev)\.(\d+))?$/;
+const VERSION_RE = /^\d+\.\d+\.\d+(?:\.\d+)?(?:-(?:rc|beta|alpha|dev)\.\d+|-linux)?$/;
 
 const argv = process.argv.slice(2);
 const cmd = argv[0] || 'show';
@@ -63,7 +64,7 @@ function commitsSince(tag) {
 function compareVersion(a, b) {
   const pa = a.split('-')[0].split('.').map(Number);
   const pb = b.split('-')[0].split('.').map(Number);
-  for (let i = 0; i < 3; i += 1) {
+  for (let i = 0; i < Math.max(pa.length, pb.length); i += 1) {
     if ((pa[i] ?? 0) !== (pb[i] ?? 0)) return (pa[i] ?? 0) > (pb[i] ?? 0) ? 1 : -1;
   }
   return 0;
@@ -110,7 +111,7 @@ function check() {
   const root = readJson(ROOT_PKG);
   const plugin = readJson(PLUGIN_PKG);
 
-  if (!SEMVER.test(root.version)) errors.push(`根 package.json 版本不是合法 semver：${root.version}`);
+  if (!VERSION_RE.test(root.version)) errors.push(`根 package.json 版本不是合法 semver：${root.version}`);
   if (plugin.version !== root.version) {
     errors.push(`插件 package.json（${plugin.version}）与根（${root.version}）不一致`);
   }

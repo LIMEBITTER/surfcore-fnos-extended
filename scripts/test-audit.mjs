@@ -241,7 +241,6 @@ const tests = [
   // 验收报告 A–D：结构化 403 / 密钥打码 / 目的历史 / 超时 code。
   'test-acceptance-abcd.mjs',
   // dev 通道 / Pre-release 发布链路（2026-11-01）。
-  'test-dev-publish.mjs',
   // 主题/对比度约束（深色、浅色都不能低对比）。
   'test-theme-tokens.mjs',
   'test-voice-diagnostics.mjs',

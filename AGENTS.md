@@ -11,7 +11,7 @@
 - 唯一维护分支是 `linux`；不要新建 `main`/`dev`、不要删除 `linux`。同步上游用
   `git fetch upstream && git merge upstream/main`，冲突**优先上游**，同步后保留本节的 fork 边界。
 - 平台只保证 Linux/fnOS；Windows 兼容层已移除，不要以 Windows 行为作为验收前提。
-- 版本号带 `-linux`（如 `0.8.8-linux`）。用户没有明确要求发布时，编辑会话**不 bump 版本、不打 tag、
+- 版本号带 `-linux`（如 `0.8.9.1-linux`）。用户没有明确要求发布时，编辑会话**不 bump 版本、不打 tag、
   不推公开仓库、不发 Release**。
 - 同步/合并后必须重生成 `release/install-manifest.json`，并保留 `docs/cases/README.md` 里的 fork 案例行。
 
@@ -35,24 +35,17 @@
 9. **小步提交**：一次一件事；提交信息写「现象 + 修法」，别写 update/fix。
 10. **不确定就问**：涉及删除、发布、对外发送、改用户数据时停下来问用户，不要「先做了再说」。
 
-## 1.5 发布与编辑分开 + dev/main 双分支（2026-11-01 用户拍板 A 方案）
+## 1.5 发布与编辑分开 + 单一 linux 分支（2026-11-08 更新）
 
-**版本号与发布只能在一个"发布会话"里做**；其它会话只管改代码。代码与发布之间隔一层 `dev`：
+**版本号与发布只能在一个"发布会话"里做**；其它会话只管改代码。
 
-- **`dev`（集货区）**：所有日常修复/功能/文档提交到这里；可以随时 commit；**不改 `package.json` 的 version、不打 tag、不发 Release、不推公开仓库**。
+- **唯一维护分支是 `linux`**。没有 `dev`、没有 `main`；不要新建，也不要改名。
+- **编辑会话**：日常修复/功能/文档直接提交到 `linux`；可以随时 commit；**不改 `package.json` 的 version、不打 tag、不发 Release、不推公开仓库**。
   - 编辑会话只保证：`npm run test:audit` 通过 + 插件测试通过 + case 文档。
-- **`main`（稳定线）**：只放"已发布"的状态。只允许两种提交：
-  1. 发布会话从 `dev` 合并（`git merge --no-ff dev`）后做 release commit；
-  2. 热修（安全/数据丢失/完全不可用）从 `main` 切 `hotfix/*`，修完立即 patch，再回并 `dev`。
-- **发布会话流程**：`git checkout main` → 合并 dev → **现读** `git status/log/package.json` → 跑三条门禁（见 §1.8）→ bump/commit/tag/Release → **把 main 合回 dev**。
-- **公开仓库/镜像只同步 `main`**：zip 用户不会拿到半成品；`dev` 留在本地（需要给志愿者测试时发 **GitHub Pre-release**，`/releases/latest` 天然忽略它）。
-- **发 dev 构建**：在 `dev` 上运行 `GH_TOKEN=... node scripts/publish-dev.mjs --yes`（版本 `X.Y.Z-dev.N`，只发 Pre-release，不碰 main）；
-  测试机切通道与验收清单见 [`docs/guides/DEV-TESTING.md`](docs/guides/DEV-TESTING.md)。
-- **任何发布前必须先问用户（含 dev Pre-release）**：把「版本号 / 改了什么 / 影响谁 / 验证结果」列出来，
-  等用户明确说“发”再执行；**不允许**自己决定发版或用 `--yes` 跳过确认（2026-11-01 用户要求）。
-- 两边不要同时跑 `git` 写操作（会撞 `index.lock`）。
-
-**判断标准**：用户可见的行为变化才需要进稳定版；纯重构/文档/实验性改动留在 dev 攒着。
+- **发布会话**：`git checkout linux` → **现读** `git status/log/package.json` → 跑三条门禁（见 §1.8）→ bump/commit/tag/Release。
+- **发布只发正式 Release**；dev 测试通道已于 2026-11-08 移除，`publish-dev.mjs` / `test-dev-publish.mjs` 已删除。
+- **任何发布前必须先问用户**：把「版本号 / 改了什么 / 影响谁 / 验证结果」列出来，等用户明确说“发”再执行；不允许自己决定发版。
+- 同一时间只允许一个会话跑 `git` 写操作（会撞 `index.lock`）。
 
 ## 1.6 讲透逻辑（2026-10-29 用户要求）
 
@@ -123,17 +116,17 @@
 ## 1.9 多会话协作：一会话一工作树（2026-11-02 事故后刚性）
 
 **同一个工作区，同一时间只允许一个会话写代码。** 第二个及以后的会话必须开独立工作树 + 独立分支，
-不允许“大家小心一点”地共用 `dev` 工作区。
+不允许“大家小心一点”地共用 `linux` 工作区。
 
 - 开工前先跑：`git status --porcelain`、`git worktree list`、`git log --oneline -5`；
   **工作区里的脏文件不全是你的 → 停手**，让对应会话先收走。
-- 新会话一律：`git worktree add ..\surfcore-<topic> -b feat/<topic> dev`，之后只在那个目录改。
+- 新会话一律：`git worktree add ..\surfcore-<topic> -b feat/<topic> linux`，之后只在那个目录改。
 - **禁止 `git add -A` / `git add .` / `git commit -a`**；只 add 自己负责的明确路径。
 - 提交前核对 `git diff --cached --stat`；出现不是自己的文件 → `git restore --staged <file>`。
 - 禁止在别人可能正在写时执行 `git switch/checkout/reset/stash/clean`。
-- `dev` 是集货区：功能分支完成并跑完测试后，用 `git merge --no-ff feat/<topic>` 合并；
+- `linux` 是唯一维护分支：功能分支完成并跑完测试后，合回 `linux`；
   合并后从**合并后的 HEAD** 重新生成 `release/install-manifest.json`（不要手工解冲突）。
-- **运行时也串行**：QQ 桥接 / DSH 重启、B站 tick、`publish-dev` / 发布，同一时间只允许一个会话做；
+- **运行时也串行**：QQ 桥接 / DSH 重启、B站 tick、发布，同一时间只允许一个会话做；
   做之前先在会话里说明。
 - 发现污染：不要 rewrite 已 push 的历史；在 `docs/cases/` 记录，后续用干净分支补提交。
 

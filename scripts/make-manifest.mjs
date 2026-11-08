@@ -39,7 +39,7 @@ if (!version || !file) {
   console.error('用法: node scripts/make-manifest.mjs --version 0.3.0 --file <zip> [--url <直链>] [--notes <md>] [--out version.json]');
   process.exit(2);
 }
-if (!/^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/.test(version)) {
+if (!/^\d+\.\d+\.\d+(?:\.\d+)?(?:[-+][0-9A-Za-z.-]+)?$/.test(version)) {
   console.error(`版本号不像 semver：${version}（示例 0.3.0 / 1.2.0-beta.1）`);
   process.exit(2);
 }

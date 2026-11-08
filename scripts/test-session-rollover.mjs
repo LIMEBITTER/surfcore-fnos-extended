@@ -399,7 +399,7 @@ console.log('## 15. 更新 busy 锁：必须说人话并自动复位')
   ok(ui.includes('r.code === "apply.busy"'), '忙锁时保留更新弹窗，方便锁释放后重试')
   ok(upd.includes('applyGeneration') && upd.includes('applyToken === applyGeneration'), '被超时复位的旧 apply 不能清掉新 apply 的锁（ABA 防护）')
   ok(ui.includes('总大小未知（GitHub 归档）'), '更新进度在拿不到总大小时仍显示已下载大小和未知原因')
-  ok(ui.includes('包大小未知（GitHub 归档）'), 'dev/版本通道在无 asset.size 时明确标注包大小未知')
+  ok(ui.includes('包大小未知（GitHub 归档）'), '版本通道在无 asset.size 时明确标注包大小未知')
 }
 
 console.log('## 16. 会话滚动：P0 延后到下一轮 + 状态持久化')
