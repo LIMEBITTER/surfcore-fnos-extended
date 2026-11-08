@@ -359,27 +359,46 @@ select.qbw-select option{background:var(--qbw-surface);color:var(--qbw-text)}
         .replace(/_/g, " ");
 
     async function api(path, options = {}) {
-      const res = await fetch(`${API}${path}`, {
-        ...options,
-        headers: {
-          accept: "application/json",
-          ...(options.body ? { "content-type": "application/json" } : {}),
-          ...(options.headers ?? {}),
-        },
-        ...(options.body ? { body: JSON.stringify(options.body) } : {}),
-      });
-      let data = {};
-      try { data = await res.json(); } catch {}
-      if (!res.ok) {
-        const error = new Error(data?.error || `HTTP ${res.status}`);
-        error.status = res.status;
-        error.code = data?.code || '';
-        error.hint = data?.hint || '';
-        error.missing = Array.isArray(data?.missing) ? data.missing : [];
-        error.data = data;
-        throw error;
+      const ctx = typeof window !== "undefined" ? window.__surfcoreClickCtx : null;
+      if (ctx) {
+        ctx.sawApi = true;
+        ctx.pending = (ctx.pending || 0) + 1;
       }
-      return data;
+      try {
+        const res = await fetch(`${API}${path}`, {
+          ...options,
+          headers: {
+            accept: "application/json",
+            ...(options.body ? { "content-type": "application/json" } : {}),
+            ...(options.headers ?? {}),
+          },
+          ...(options.body ? { body: JSON.stringify(options.body) } : {}),
+        });
+        let data = {};
+        try { data = await res.json(); } catch {}
+        if (!res.ok) {
+          const error = new Error(data?.error || `HTTP ${res.status}`);
+          error.status = res.status;
+          error.code = data?.code || '';
+          error.hint = data?.hint || '';
+          error.missing = Array.isArray(data?.missing) ? data.missing : [];
+          error.data = data;
+          throw error;
+        }
+        if (ctx) {
+          ctx.failed = data && data.ok === false ? new Error(data.error || data.message || "操作失败") : null;
+          ctx.lastData = data;
+        }
+        return data;
+      } catch (err) {
+        if (ctx) ctx.failed = err;
+        throw err;
+      } finally {
+        if (ctx) {
+          ctx.pending = Math.max(0, (ctx.pending || 0) - 1);
+          if (ctx.pending === 0 && typeof ctx.onIdle === "function") ctx.onIdle();
+        }
+      }
     }
 
     function useStyleOnce() {
@@ -692,8 +711,89 @@ select.qbw-select option{background:var(--qbw-surface);color:var(--qbw-text)}
       return h("span", { className: "qbw-dot " + (ok ? "ok" : warn ? "warn" : "bad") }, h("i"), children);
     }
 
-    function Btn({ children, onClick, disabled, kind = "", title, type = "button" }) {
-      return h("button", { type, title, className: `qbw-btn ${kind}`.trim(), onClick, disabled }, children);
+    function buttonText(children) {
+      if (typeof children === "string" || typeof children === "number") return String(children).trim();
+      if (Array.isArray(children)) return children.map(buttonText).filter(Boolean).join(" ").trim();
+      return "";
+    }
+
+    function feedbackMessage(ctx, result, label) {
+      const name = (label || "操作").replace(/[…]+$/g, "").trim() || "操作";
+      const mark = (text, ok) => {
+        const t = String(text == null ? "" : text).trim();
+        if (!t) return "";
+        if (/^[✓✗]/.test(t)) return t;
+        return `${ok ? "✓" : "✗"} ${t}`;
+      };
+      if (result && typeof result === "object" && result.cancelled) return "";
+      if (ctx && ctx.failed) {
+        const e = ctx.failed;
+        const hint = e && e.hint && !String(e.message || "").includes(e.hint) ? `（${e.hint}）` : "";
+        return mark(`${name}失败：${(e && e.message) || "未知错误"}${hint}`, false);
+      }
+      const value = result !== undefined ? result : (ctx ? ctx.lastData : undefined);
+      if (value && typeof value === "object") {
+        if (value.cancelled) return "";
+        if (value.ok === false) return mark(`${name}失败：${value.error || value.reason || value.message || "未知错误"}`, false);
+        if (typeof value.message === "string" && value.message.trim()) return mark(value.message, true);
+        if (value.ok === true) return mark(`${name}完成`, true);
+      }
+      if (typeof value === "string" && value.trim()) return mark(value.trim(), true);
+      return mark(`${name}完成`, true);
+    }
+
+    function Btn({ children, onClick, disabled, kind = "", title, type = "button", feedback = true }) {
+      const [working, setWorking] = useState(false);
+      const run = async (event) => {
+        if (typeof onClick !== "function") return;
+        if (!feedback) return onClick(event);
+        const label = buttonText(children) || "操作";
+        const ctx = {
+          label,
+          toastSeq: Number(window.__surfcoreToastSeq || 0),
+          pending: 0,
+          sawApi: false,
+          failed: null,
+          lastData: undefined,
+          onIdle: null,
+        };
+        ctx.idle = new Promise((resolve) => { ctx.onIdle = resolve; });
+        window.__surfcoreClickCtx = ctx;
+        setWorking(true);
+        let result;
+        try {
+          result = onClick(event);
+          if (result && typeof result.then === "function") {
+            result = await result;
+          }
+          if (ctx.pending > 0) {
+            let timer;
+            await Promise.race([ctx.idle, new Promise((resolve) => { timer = setTimeout(resolve, 15000); })]);
+            clearTimeout(timer);
+          }
+          if (ctx.pending > 0) return;
+          if (typeof window.__surfcoreToast !== "function") return;
+          if (Number(window.__surfcoreToastSeq || 0) !== ctx.toastSeq) return;
+          const usefulResult = result !== undefined && (
+            (typeof result === "string" && result.trim() !== "") ||
+            (result && typeof result === "object" && (
+              result.ok !== undefined || result.message !== undefined || result.error !== undefined || result.reason !== undefined || result.cancelled !== undefined
+            ))
+          );
+          if (!ctx.sawApi && !usefulResult) return;
+          const message = feedbackMessage(ctx, result, label);
+          if (message) window.__surfcoreToast(message);
+        } catch (err) {
+          if (typeof window.__surfcoreToast !== "function") return;
+          if (Number(window.__surfcoreToastSeq || 0) !== ctx.toastSeq) return;
+          const message = feedbackMessage({ ...ctx, failed: ctx.failed || err }, result, label);
+          if (message) window.__surfcoreToast(message);
+        } finally {
+          if (window.__surfcoreClickCtx === ctx) window.__surfcoreClickCtx = null;
+          setWorking(false);
+        }
+      };
+      return h("button", { type, title, className: `qbw-btn ${kind}`.trim(), onClick: run, disabled: disabled || working, "aria-busy": working ? "true" : undefined }, children);
     }
 
     // ── 管理员卡片（QQ / B站 两个标签页共用同一份身份）──────────────────────
@@ -8092,6 +8192,7 @@ F("socialV2.voice.ffmpegPath", "ffmpeg 路径", "留空走 PATH", "text", { wide
       const [adminDiscardContext, setAdminDiscardContext] = useState(false);
       // 浮层文案（字符串）。真正的通知函数叫 notify —— 两者别同名，否则会被误当函数传（2026-10-30）。
       const [toastText, setToastText] = useState("");
+      const toastTimer = useRef(0);
       const [err, setErr] = useState("");
       const [resourceOpen, setResourceOpen] = useState(false);
       const [warnings, setWarnings] = useState([]);
@@ -8113,11 +8214,23 @@ F("socialV2.voice.ffmpegPath", "ffmpeg 路径", "留空走 PATH", "text", { wide
       }, []);
 
       const notify = (message) => {
-        setToastText(message);
-        setTimeout(() => setToastText(""), 4000);
+        if (!message) return;
+        window.__surfcoreToastSeq = Number(window.__surfcoreToastSeq || 0) + 1;
+        setToastText(String(message));
+        if (toastTimer.current) clearTimeout(toastTimer.current);
+        toastTimer.current = setTimeout(() => {
+          toastTimer.current = 0;
+          setToastText("");
+        }, 4000);
       };
       // 让深层组件（如泛用 Field 的「浏览…」）也能弹提示，而不是静默失败。
-      useEffect(() => { window.__surfcoreToast = notify; return () => { delete window.__surfcoreToast; }; }, []);
+      useEffect(() => {
+        window.__surfcoreToast = notify;
+        return () => {
+          delete window.__surfcoreToast;
+          if (toastTimer.current) clearTimeout(toastTimer.current);
+        };
+      }, []);
       // 网盘资源入口：语音包 + 向量记忆模型。百度和 UC 待补链。
       const RESOURCE_LINKS = {
         quark: "https://pan.quark.cn/s/2f49b5496874?pwd=jXqr",
@@ -8406,7 +8519,7 @@ F("socialV2.voice.ffmpegPath", "ffmpeg 路径", "留空走 PATH", "text", { wide
           h(Btn, { kind: "qbw-btn2", onClick: reload, disabled: !!busy }, "重新读取"),
           h("span", { className: "spacer" }),
           dirty ? h("span", { className: "qbw-dirty" }, "● 有改动还没保存（改了不点保存 = 没生效）") : h("span", { className: "qbw-ok" }, "已保存")),
-        toastText ? h("div", { className: "qbw-toast", role: "status" }, toastText) : null,
+        toastText ? h("div", { className: "qbw-toast", role: "status", "aria-live": "polite" }, toastText) : null,
         resourceOpen ? h("div", { className: "qbw-modal-backdrop", onClick: (e) => { if (e.target === e.currentTarget) setResourceOpen(false); } },
           h("div", { className: "qbw-modal", style: { maxWidth: "560px" } },
             h("h3", null, "获取网盘资源"),
