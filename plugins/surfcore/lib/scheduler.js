@@ -931,7 +931,10 @@ export function startScheduler(ctx, opts) {
     const day = d.getDay()
     return wins.some((w) => {
       const normalized = normalizeWindow(w)
-      return normalized.ok && normalizeDays(w?.days).includes(day) && windowContains(normalized, m)
+      if (!normalized.ok || !windowContains(normalized, m)) return false
+      // 跨午夜窗口的「开始日」是昨天：00:30 仍属于昨天那一天的窗口。
+      const ownerDay = normalized.wrap && m < normalized.end - 1440 ? (day + 6) % 7 : day
+      return normalizeDays(w?.days).includes(ownerDay)
     })
   }
 

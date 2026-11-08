@@ -119,7 +119,8 @@ export function buildNightSchedule({
   const wins = normalizeNightWindows(windows)
   const warnings = []
   const activeDay = day == null ? null : ((Number(day) % 7) + 7) % 7
-  const forDay = activeDay == null ? wins : wins.filter((w) => w.days.includes(activeDay))
+  const forDay = activeDay == null ? wins : wins.filter((w) => w.days.includes(activeDay)
+    || (w.wrap && (Number(nowMin) || 0) < w.end - 1440 && w.days.includes((activeDay + 6) % 7)))
   if (activeDay != null && !forDay.length) {
     warnings.push(`今天（${DAY_NAMES[activeDay] ?? activeDay}）没有适用的作息窗口`)
   }

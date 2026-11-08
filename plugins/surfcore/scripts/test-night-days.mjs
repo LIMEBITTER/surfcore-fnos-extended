@@ -37,3 +37,13 @@ assert.ok(none.warnings.some((w) => w.includes('没有适用的作息窗口')))
 const zero = buildNightSchedule({ windows: numeric, maxWakes: 0, nowMin: 0, day: 1, random: () => 0.5 })
 assert.equal(zero.slots.length, 0)
 console.log('night days tests OK')
+
+// 跨午夜：00:30 仍属于“开始那天”（周一 23:00–02:00）的窗口。
+const cross = [{ start: '23:00', end: '02:00', wakes: 1, days: [1] }]
+const afterMidnight = buildNightSchedule({ windows: cross, maxWakes: 1, minGapMin: 20, skipChance: 0, nowMin: 30, day: 2, random: () => 0.5 })
+assert.equal(afterMidnight.slots.length, 1)
+assert.equal(afterMidnight.slots[0].days.join(','), '1')
+const afterEnd = buildNightSchedule({ windows: cross, maxWakes: 1, minGapMin: 20, skipChance: 0, nowMin: 130, day: 2, random: () => 0.5 })
+assert.equal(afterEnd.slots.length, 0)
+assert.ok(afterEnd.warnings.some((w) => w.includes('没有适用的作息窗口')))
+console.log('cross-midnight day tests OK')
