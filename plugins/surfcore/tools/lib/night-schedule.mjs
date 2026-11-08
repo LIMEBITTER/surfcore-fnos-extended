@@ -12,7 +12,7 @@
  * 这个文件只做纯计算，方便单测；whale-night.mjs 负责读写状态和叫醒。
  */
 
-import { normalizeWindow, parseClock, windowContains as sharedWindowContains } from './time-window.mjs'
+import { DAY_NAMES, formatClock, normalizeDays, normalizeWindow, parseClock, windowContains as sharedWindowContains } from './time-window.mjs'
 
 export const DEFAULT_MIN_GAP_MIN = 20
 
@@ -32,9 +32,16 @@ export function normalizeNightWindows(windows = []) {
   const list = Array.isArray(windows) && windows.length
     ? windows
     : [{ start: '20:00', end: '24:00', wakes: 1 }]
+  const asClock = (value) => {
+    if (typeof value === 'number' && Number.isFinite(value)) {
+      return formatClock(Math.max(0, Math.min(1440, Math.round(value))))
+    }
+    return value
+  }
   const out = []
   for (const raw of list) {
-    const normalized = normalizeWindow(raw)
+    // windowsOf() 用的是分钟数；配置/测试用的是 '20:00' 文本。两种都接。
+    const normalized = normalizeWindow({ ...raw, start: asClock(raw?.start), end: asClock(raw?.end) })
     if (!normalized.ok) continue
     out.push({
       start: normalized.start,
@@ -42,11 +49,12 @@ export function normalizeNightWindows(windows = []) {
       wrap: normalized.wrap,
       label: raw?.label ?? normalized.label,
       wakes: normalized.wakes,
+      days: normalizeDays(raw?.days),
     })
   }
   if (!out.length) {
     const fallback = normalizeWindow({ start: '20:00', end: '24:00', wakes: 1 })
-    if (fallback.ok) out.push({ ...fallback, label: fallback.label })
+    if (fallback.ok) out.push({ ...fallback, label: fallback.label, days: [...normalizeDays([])] })
   }
   return out
 }
@@ -61,8 +69,9 @@ export function windowContains(w, min) {
  * 没有评分的窗口不返回（调用方按 0 处理）。
  * @param {Record<string, Array<{at?:string, score?:number}>>} scores
  */
-export function qualityByWindow(scores = {}, windows = [], { now = Date.now(), days = 30 } = {}) {
+export function qualityByWindow(scores = {}, windows = [], { now = Date.now(), days = 30, day = null } = {}) {
   const cutoff = Number(now) - Math.max(1, Number(days) || 30) * 86_400_000
+  const pool = day == null ? windows : windows.filter((w) => normalizeDays(w.days).includes(Number(day)))
   const acc = new Map()
   for (const rows of Object.values(scores ?? {})) {
     if (!Array.isArray(rows)) continue
@@ -72,7 +81,7 @@ export function qualityByWindow(scores = {}, windows = [], { now = Date.now(), d
       if (!Number.isFinite(at) || at < cutoff || !Number.isFinite(score)) continue
       const d = new Date(at)
       const minute = d.getHours() * 60 + d.getMinutes()
-      const w = windows.find((x) => windowContains(x, minute))
+      const w = pool.find((x) => windowContains(x, minute))
       if (!w) continue
       const cur = acc.get(w.label) ?? { sum: 0, count: 0 }
       cur.sum += score
@@ -93,6 +102,7 @@ export function qualityByWindow(scores = {}, windows = [], { now = Date.now(), d
  * @param {number} opts.minGapMin 相邻两次苏醒最小间隔（默认 20）
  * @param {number} opts.skipChance “轻醒”概率
  * @param {number} opts.nowMin 当前本地分钟（0~1439）
+ * @param {number|null} opts.day 今天星期几（0=周日）；null = 不过滤
  * @param {Record<string,number>} opts.quality 每个窗口的历史质量
  * @param {() => number} opts.random
  */
@@ -102,15 +112,21 @@ export function buildNightSchedule({
   minGapMin = DEFAULT_MIN_GAP_MIN,
   skipChance = 0.3,
   nowMin = 0,
+  day = null,
   quality = {},
   random = Math.random,
 } = {}) {
   const wins = normalizeNightWindows(windows)
   const warnings = []
+  const activeDay = day == null ? null : ((Number(day) % 7) + 7) % 7
+  const forDay = activeDay == null ? wins : wins.filter((w) => w.days.includes(activeDay))
+  if (activeDay != null && !forDay.length) {
+    warnings.push(`今天（${DAY_NAMES[activeDay] ?? activeDay}）没有适用的作息窗口`)
+  }
   const cap = Math.max(0, Math.min(12, Math.floor(Number(maxWakes) || 0)))
   const gap = Math.max(0, Math.floor(Number(minGapMin) || 0))
   const now = Number(nowMin) || 0
-  const enabled = wins.filter((w) => w.wakes > 0)
+  const enabled = forDay.filter((w) => w.wakes > 0)
   // 已经结束的窗口今天不补；只给还没结束的窗口排（跨午夜窗口保持开放）。
   const open = enabled.filter((w) => (w.wrap ? true : w.end > now))
   if (enabled.length > open.length) {
@@ -185,6 +201,7 @@ export function buildNightSchedule({
         window: w.label,
         start: w.start,
         end: w.end,
+        days: w.days,
         at,
         atText: minToHHMM(at),
         kind: i === 0 ? 'base' : 'extra',

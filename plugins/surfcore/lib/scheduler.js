@@ -27,7 +27,7 @@ import { config } from '../tools/lib/config.mjs'
 import { pendingCount as attackPending } from '../tools/lib/attacks.mjs'
 import { pinOf, noteOf } from '../tools/lib/pins.mjs'
 import { markScheduleSlot } from '../tools/lib/night-schedule.mjs'
-import { normalizeWindow, windowContains } from '../tools/lib/time-window.mjs'
+import { normalizeDays, normalizeWindow, windowContains } from '../tools/lib/time-window.mjs'
 import {
   BILI_ALIGNMENT_FILE, BILI_CONFIG, QQ_STATE_DIR, findNodeExe,
 } from './paths.js'
@@ -928,9 +928,10 @@ export function startScheduler(ctx, opts) {
   const inWindow = (cfg) => {
     const wins = Array.isArray(cfg?.night?.windows) ? cfg.night.windows : []
     const d = new Date(); const m = d.getHours() * 60 + d.getMinutes()
+    const day = d.getDay()
     return wins.some((w) => {
       const normalized = normalizeWindow(w)
-      return normalized.ok && windowContains(normalized, m)
+      return normalized.ok && normalizeDays(w?.days).includes(day) && windowContains(normalized, m)
     })
   }
 

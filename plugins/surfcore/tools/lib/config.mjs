@@ -55,7 +55,7 @@ export const DEFAULTS = {
   // 倾听（2026-10-18 补默认值，与设置页对齐）：评论区 + 直播间
   listen: { comment: true, commentIntervalSec: 300, scope: 'both', oncePerPerson: false, allDay: false, dm: false, live: false, liveRoom: '', liveScope: 'owner' },
   // 作息：windows[] = 每天允许醒来的时段（每个窗口 = 一次机会）；maxWakesPerDay 缺省 = 窗口数（硬上限 3）
-  night: { windows: [{ start: '20:00', end: '24:00', wakes: 1 }], skipChance: 0.3, maxVideos: 5, minGapMin: 20 },
+  night: { windows: [{ start: '20:00', end: '24:00', wakes: 1, days: [0, 1, 2, 3, 4, 5, 6] }], skipChance: 0.3, maxVideos: 5, maxWakesPerDay: 1, minGapMin: 20 },
   // 评论区鱼群保护：鱼太多不发新楼层；优先回鱼；给鱼点赞（设置页可改）。
   fishGuard: DEFAULT_BILI_FISH_GUARD,
   // B站 自己的 DSH 会话权限（2026-10-23）：

@@ -1510,7 +1510,7 @@ F("sessionCwd", "会话工作目录", "留空用 surfcore 根目录", "text", { 
       { group: "作息", note: "生物钟窗口", fields: [
         F("night.skipChance", "今晚不看的概率", "0.3 = 三成；轻醒只结束当前 slot，不结束全天", "number", { min: 0, max: 0.95, step: 0.01 }),
         F("night.maxVideos", "单次初筛视频数", "", "number", { min: 1, max: 20 }),
-        F("night.maxWakesPerDay", "每天最多醒来", "0~12；C 模式：每窗至少 1 次，剩余按该时段评分分配", "number", { min: 0, max: 12 }),
+        F("night.maxWakesPerDay", "每天最多醒来", "0~12；0 = 当天不醒；C 模式：每窗至少 1 次，剩余按该时段评分分配", "number", { min: 0, max: 12 }),
         F("night.minGapMin", "两次苏醒最小间隔（分钟）", "默认 20；相邻窗口也按这个错开；太小会低质量空跑", "number", { min: 0, max: 120 }),
       ]},
       { group: "口味（文本）", note: "逗号分隔；单个关键词的权重在下面「口味权重 / 一键抓取」里调", fields: [
@@ -1629,27 +1629,76 @@ F("toolsPath", "bili.mjs 路径", "留空 = 用合体插件自带的 tools/", "t
     const NUMS = ["①", "②", "③", "④", "⑤", "⑥", "⑦", "⑧", "⑨", "⑩", "⑪", "⑫"];
     function WindowsEditor({ value, onChange }) {
       const list = Array.isArray(value) ? value : [];
+      const WIN_DAYS = [0, 1, 2, 3, 4, 5, 6];
+      const WIN_DAY_LABELS = ["周日", "周一", "周二", "周三", "周四", "周五", "周六"];
+      const WIN_DAY_ORDER = [1, 2, 3, 4, 5, 6, 0];
+      const WIN_PRESETS = [
+        { id: "all", label: "每天", days: WIN_DAYS },
+        { id: "work", label: "工作日", days: [1, 2, 3, 4, 5] },
+        { id: "weekend", label: "周末", days: [0, 6] },
+      ];
+      const sameDays = (a, b) => a.length === b.length && a.every((x, i) => x === b[i]);
+      const daysOf = (raw) => {
+        const arr = Array.isArray(raw) ? raw : String(raw ?? "").split(/[,，\s]+/).filter(Boolean);
+        const out = [...new Set(arr.map(Number).filter((n) => Number.isInteger(n) && n >= 0 && n <= 6))]
+          .sort((a, b) => a - b);
+        return out.length ? out : WIN_DAYS.slice();
+      };
+      const presetOf = (days) => WIN_PRESETS.find((p) => sameDays(days, p.days));
+      const dayMode = (days) => presetOf(days)?.id ?? "custom";
+      const daySummary = (days) => {
+        const preset = presetOf(days);
+        if (preset) return preset.label;
+        return WIN_DAY_ORDER.filter((d) => days.includes(d)).map((d) => WIN_DAY_LABELS[d]).join("、");
+      };
       const normalizeTime = (raw) => String(raw ?? "").trim()
         .replace(/：/g, ":")
         .replace(/[０-９]/g, (ch) => String("０１２３４５６７８９".indexOf(ch)));
       const upd = (i, patch) => onChange(list.map((w, j) => (j === i ? { ...w, ...patch } : w)));
       const del = (i) => onChange(list.filter((_, j) => j !== i));
-      const add = () => onChange([...list, { start: "20:00", end: "22:00", wakes: 1 }]);
+      const add = () => onChange([...list, { start: "20:00", end: "22:00", wakes: 1, days: WIN_DAYS.slice() }]);
       return h("div", null,
         list.length === 0 ? h("div", { className: "qbw-warnbox" }, "没有窗口 = 永远不醒；至少加一个。") : null,
-        h("div", { className: "qbw-list" }, list.map((w, i) => h("div", { className: "qbw-item", key: i },
-          h("div", { style: { display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" } },
-            h("span", { className: "qbw-hint", style: { minWidth: "18px" } }, NUMS[i] ?? String(i + 1)),
-            h("input", { className: "qbw-input", style: { width: "90px", minWidth: "90px" }, value: w.start ?? "", onChange: (e) => upd(i, { start: e.target.value }), onBlur: (e) => upd(i, { start: normalizeTime(e.target.value) }) }),
-            h("span", { className: "qbw-hint" }, "–"),
-            h("input", { className: "qbw-input", style: { width: "90px", minWidth: "90px" }, value: w.end ?? "", onChange: (e) => upd(i, { end: e.target.value }), onBlur: (e) => upd(i, { end: normalizeTime(e.target.value) }) }),
-            h("span", { className: "qbw-hint" }, "醒来"),
-            h("input", { className: "qbw-input", style: { width: "64px", minWidth: "64px" }, type: "number", min: 1, max: 12, value: w.wakes ?? 1, onChange: (e) => upd(i, { wakes: Number(e.target.value) || 1 }) }),
-            h("span", { className: "qbw-hint" }, "次")),
-          h(Btn, { kind: "qbw-btn2", disabled: list.length <= 1, onClick: () => del(i), title: list.length <= 1 ? "至少保留一个窗口；要换时间直接改" : "删掉这个窗口" }, "×")))),
+        h("div", { className: "qbw-list" }, list.map((w, i) => {
+          const days = daysOf(w.days);
+          const mode = dayMode(days);
+          return h("div", { className: "qbw-item", key: i },
+            h("div", { style: { flex: 1, minWidth: "220px" } },
+              h("div", { style: { display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" } },
+                h("span", { className: "qbw-hint", style: { minWidth: "18px" } }, NUMS[i] ?? String(i + 1)),
+                h("input", { className: "qbw-input", style: { width: "90px", minWidth: "90px" }, value: w.start ?? "", onChange: (e) => upd(i, { start: e.target.value }), onBlur: (e) => upd(i, { start: normalizeTime(e.target.value) }) }),
+                h("span", { className: "qbw-hint" }, "–"),
+                h("input", { className: "qbw-input", style: { width: "90px", minWidth: "90px" }, value: w.end ?? "", onChange: (e) => upd(i, { end: e.target.value }), onBlur: (e) => upd(i, { end: normalizeTime(e.target.value) }) }),
+                h("span", { className: "qbw-hint" }, "醒来"),
+                h("input", { className: "qbw-input", style: { width: "64px", minWidth: "64px" }, type: "number", min: 1, max: 12, value: w.wakes ?? 1, onChange: (e) => upd(i, { wakes: Number(e.target.value) || 1 }) }),
+                h("span", { className: "qbw-hint" }, "次")),
+              h("div", { style: { display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap", marginTop: "6px" } },
+                h("span", { className: "qbw-hint" }, "适用"),
+                WIN_PRESETS.map((preset) => h(Btn, {
+                  key: preset.id,
+                  kind: mode === preset.id ? "qbw-btn" : "qbw-btn2",
+                  onClick: () => upd(i, { days: preset.days.slice() }),
+                }, preset.label)),
+                h("span", { className: "qbw-hint" }, daySummary(days))),
+              h("div", { className: "qbw-chips" },
+                WIN_DAY_ORDER.map((d) => h("button", {
+                  type: "button",
+                  key: d,
+                  className: "qbw-chip" + (days.includes(d) ? " on" : ""),
+                  title: days.includes(d) ? "点一下取消这一天（至少保留一天）" : "把这一天加进来",
+                  onClick: () => {
+                    const next = days.includes(d)
+                      ? days.filter((x) => x !== d)
+                      : [...days, d].sort((a, b) => a - b);
+                    if (next.length) upd(i, { days: next });
+                  },
+                }, WIN_DAY_LABELS[d])))),
+            h(Btn, { kind: "qbw-btn2", disabled: list.length <= 1, onClick: () => del(i), title: list.length <= 1 ? "至少保留一个窗口；要换时间直接改" : "删掉这个窗口" }, "×"));
+        })),
         h("div", { style: { marginTop: "8px" } },
           h(Btn, { kind: "qbw-btn2", onClick: add }, "+ 添加窗口"),
-          h("span", { className: "qbw-hint", style: { marginLeft: "8px" } }, "至少保留一个窗口；最后一个的 × 会置灰，想换时段直接改时间")));
+          h("span", { className: "qbw-hint", style: { marginLeft: "8px" } }, "至少保留一个窗口；最后一个的 × 会置灰，想换时段直接改时间")),
+        h("div", { className: "qbw-hint", style: { marginTop: "4px" } }, "「适用」按窗口开始那天算；跨午夜窗口也算开始日。"));
     }
 
     // ── 全部参数：把任意配置扁平化 ──────────────────────────────────────────
@@ -4710,7 +4759,7 @@ F("socialV2.voice.ffmpegPath", "ffmpeg 路径", "留空走 PATH", "text", { wide
           h("div", { className: "qbw-actions", style: { borderTop: "none", marginTop: "6px", paddingTop: "0" } },
             h(Btn, { onClick: () => setQrFish(true), disabled: !!busy }, "扫码登录小肥鱼"))),
         h(QqShareSection, { qq, set: setQqPath, data: automation, busy, setBusy, toast }),
-        h(Section, { title: "作息窗口", note: "C 模式：每个窗口至少 1 次；全天上限见「每天最多醒来」，剩余次数按该时段最近评分分配，相邻两次至少隔「最小间隔」", defaultOpen: true },
+        h(Section, { title: "作息窗口", note: "每个窗口可单独选每天 / 工作日 / 周末 / 自定义星期；C 模式：每个适用窗口至少 1 次，全天上限见「每天最多醒来」，剩余次数按该时段最近评分分配，相邻两次至少隔「最小间隔」", defaultOpen: true },
           h("div", { style: { padding: "6px 0" } }, h(WindowsEditor, { value: cfg?.night?.windows, onChange: (v) => set(["night", "windows"], v) }))),
         h(AdvancedSettings, { note: "凭据 / 鱼群状态 / 口味权重 / 待审核 / 全部 B站 参数：展开后同样可改" },
           h(FieldGroups, { groups, cfg, set, onSave, categories: BILI_ADV_CATEGORIES }),

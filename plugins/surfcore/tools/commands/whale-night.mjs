@@ -33,6 +33,7 @@ import { loadScores } from '../lib/scores.mjs'
 import {
   buildNightSchedule, nextPendingSlot, markScheduleSlot, qualityByWindow, minToHHMM,
 } from '../lib/night-schedule.mjs'
+import { normalizeDays } from '../lib/time-window.mjs'
 
 const HOME = process.env.USERPROFILE || process.env.HOME || '.'
 const STATE = biliState('whale-night.json')
@@ -64,7 +65,7 @@ const cfg = load(CFG, DEFAULTS)
 function windowsOf(c) {
   const list = Array.isArray(c.windows) && c.windows.length
     ? c.windows
-    : [{ start: c.windowStart ?? '20:00', end: c.windowEnd ?? '24:00', wakes: c.maxWakesPerDay ?? 1 }]
+    : [{ start: c.windowStart ?? '20:00', end: c.windowEnd ?? '24:00', wakes: c.maxWakesPerDay ?? 1, days: [0, 1, 2, 3, 4, 5, 6] }]
   return list
     .map((w) => {
       const start = parseHHMM(w.start)
@@ -76,6 +77,7 @@ function windowsOf(c) {
         wrap: end > 1440,
         label: `${w.start}–${w.end}`,
         wakes: Math.max(0, Number(w.wakes ?? 1) || 0),
+        days: normalizeDays(w.days),
       }
     })
     .filter((w) => w.end > w.start)
@@ -83,7 +85,10 @@ function windowsOf(c) {
 const WINDOWS = windowsOf(cfg)
 // 2026-10-23 用户选 C：每个窗口至少 1 次；全天总数 ≤ maxWakesPerDay（硬上限 12）。
 // 不再把“各窗口 wakes 之和”当上限——27 次需求和 12 次上限本身就冲突。
-const MAX_WAKES = Math.min(12, Math.max(0, Number(cfg.maxWakesPerDay ?? 12) || 12))
+const rawMaxWakes = Number(cfg.maxWakesPerDay)
+const MAX_WAKES = Number.isFinite(rawMaxWakes) && cfg.maxWakesPerDay !== null && cfg.maxWakesPerDay !== ''
+  ? Math.min(12, Math.max(0, Math.floor(rawMaxWakes)))
+  : Math.min(12, WINDOWS.reduce((sum, w) => sum + Math.max(1, Number(w.wakes) || 1), 0))
 const MIN_GAP_MIN = Math.max(0, Number(cfg.minGapMin ?? 20) || 20)
 
 const st = load(STATE, {})
@@ -128,6 +133,7 @@ function planFromSlot(state, slot) {
 
 function makePlan() {
   const now = nowMin()
+  const day = new Date().getDay()
   if (MAX_WAKES === 0) return donePlan(st, 'maxWakesPerDay=0 → 今天不醒')
 
   // 已经生成过今天的排程：只推进 slots，不重新掷骰子。
@@ -149,7 +155,8 @@ function makePlan() {
     minGapMin: MIN_GAP_MIN,
     skipChance: Number(cfg.skipChance ?? 0.3),
     nowMin: now,
-    quality: qualityByWindow(loadScores(), WINDOWS, { days: 30 }),
+    day,
+    quality: qualityByWindow(loadScores(), WINDOWS, { days: 30, day }),
   })
   const base = {
     date: today(),

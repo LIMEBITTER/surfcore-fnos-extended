@@ -22,6 +22,7 @@ import fs from 'node:fs'
 import { config } from '../lib/config.mjs'
 import path from 'node:path'
 import { makeHeaders, pullFeed, resolveLatestReply, ME, OWNER } from '../lib/msgfeed.mjs'
+import { normalizeDays } from '../lib/time-window.mjs'
 
 const args = process.argv.slice(2)
 const get = (k, d) => {
@@ -39,7 +40,9 @@ function defaultMinutes() {
     : [{ start: '20:00', end: '24:00' }]
   const now = new Date()
   const nowMin = now.getHours() * 60 + now.getMinutes()
+  const day = now.getDay()
   for (const w of wins) {
+    if (!normalizeDays(w.days).includes(day)) continue
     const [sh, sm] = String(w.start ?? '20:00').split(':').map(Number)
     const [eh, em] = String(w.end ?? '24:00').split(':').map(Number)
     const s = (sh === 24 ? 1440 : sh * 60) + (sm || 0)

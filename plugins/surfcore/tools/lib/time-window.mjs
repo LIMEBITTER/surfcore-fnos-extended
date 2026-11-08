@@ -11,6 +11,36 @@
 const FULLWIDTH_DIGITS = '０１２３４５６７８９';
 const FULLWIDTH_COLONS = /[：]/g;
 
+/** 作息窗口的“适用日”：0=周日 … 6=周六。 */
+export const ALL_DAYS = Object.freeze([0, 1, 2, 3, 4, 5, 6]);
+export const WORKDAYS = Object.freeze([1, 2, 3, 4, 5]);
+export const WEEKEND = Object.freeze([0, 6]);
+export const DAY_NAMES = Object.freeze(['周日', '周一', '周二', '周三', '周四', '周五', '周六']);
+const DAY_DISPLAY_ORDER = [1, 2, 3, 4, 5, 6, 0];
+
+/**
+ * 把配置里的 days 收敛成 0~6 的排序数组。
+ * 缺省 / 空 / 全部非法 → 每天（向后兼容旧配置）。
+ */
+export function normalizeDays(value) {
+  const raw = Array.isArray(value)
+    ? value
+    : String(value ?? '').split(/[,，\s]+/).filter(Boolean);
+  const days = [...new Set(raw.map(Number).filter((n) => Number.isInteger(n) && n >= 0 && n <= 6))]
+    .sort((a, b) => a - b);
+  return days.length ? days : [...ALL_DAYS];
+}
+
+/** 给日志/提示看的“适用日”文本。 */
+export function daysText(value) {
+  const days = normalizeDays(value);
+  const same = (a, b) => a.length === b.length && a.every((x, i) => x === b[i]);
+  if (same(days, [...ALL_DAYS])) return '每天';
+  if (same(days, [...WORKDAYS])) return '工作日';
+  if (same(days, [...WEEKEND])) return '周末';
+  return DAY_DISPLAY_ORDER.filter((d) => days.includes(d)).map((d) => DAY_NAMES[d]).join('、');
+}
+
 /** 只做文本归一化，不改变 6:00 / 06:00 的写法。 */
 export function normalizeClockText(value) {
   return String(value ?? '')

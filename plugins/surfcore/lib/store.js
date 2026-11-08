@@ -24,7 +24,7 @@ import { adminFromSources, normalizeAdmin } from '../../../src/admin-identity.js
 import { DEFAULT_MEMORY_CARD_CONFIG, normalizeMemoryCardConfig } from '../../../src/memory-card.js?rev=20261025-pet-memory2';
 import { DEFAULT_VECTOR_MEMORY_CONFIG, normalizeVectorMemoryConfig } from '../../../src/vector-memory.js';
 import { normalizeCardMode } from '../../../src/share-mode.js';
-import { normalizeClockText, normalizeWindow } from '../tools/lib/time-window.mjs';
+import { ALL_DAYS, normalizeClockText, normalizeDays, normalizeWindow } from '../tools/lib/time-window.mjs';
 
 export const MASK = '********';
 
@@ -33,7 +33,7 @@ const BIDI_DEFAULTS = {
   self: { mid: '', name: '' },
   persona: { name: '', ownerTitle: '主人', selfClaim: '我' },
   night: {
-    windows: [{ start: '20:00', end: '24:00', wakes: 1 }],
+    windows: [{ start: '20:00', end: '24:00', wakes: 1, days: [...ALL_DAYS] }],
     skipChance: 0.3,
     maxVideos: 5,
     maxWakesPerDay: 1,
@@ -515,9 +515,11 @@ export function normalizeBiliWindowList(windows) {
       warnings.push(`作息窗口已忽略：${normalized.error}（${start || '空'} – ${end || '空'}）`);
       continue;
     }
-    out.push({ start, end, wakes: normalized.wakes });
+    const win = { start, end, wakes: normalized.wakes }
+    if (raw?.days != null) win.days = normalizeDays(raw.days)
+    out.push(win);
   }
-  if (!out.length) out.push({ start: '20:00', end: '24:00', wakes: 1 });
+  if (!out.length) out.push({ start: '20:00', end: '24:00', wakes: 1, days: [...ALL_DAYS] });
   return { windows: out, warnings };
 }
 
