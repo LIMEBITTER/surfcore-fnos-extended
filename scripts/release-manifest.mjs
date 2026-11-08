@@ -1,10 +1,10 @@
 // 生成发布包的安装清单：每个文件的 sha256。
 //
-// 关键约束（2026-10-30 第二次事故）：
-//   清单里的哈希必须等于 **Git 提交里的内容**（= GitHub archive 里的字节），
-//   不能取工作目录里的文件：Windows 下工作区常是 CRLF，而 git 提交/归档是 LF，
-//   两边 sha256 必然不同 → 用户下载的包永远校验失败。
-//   所以这里用 `git cat-file` 读 HEAD（或指定 ref）的 blob 字节来算哈希。
+// 关键约束（2026-11-08 修正）：
+//   清单里的哈希必须等于 **GitHub archive 里的字节**，而不是裸 blob。
+//   archive 会按 .gitattributes 应用 eol 转换（*.bat / *.ps1 为 CRLF），
+//   裸 blob 是 LF，直接哈希会让这 9 个 Windows 文件永远校验失败。
+//   所以这里用 `git cat-file --filters --path=<rel>` 读过滤后的内容再算 sha256。
 //
 // 用法：
 //   node scripts/release-manifest.mjs                        # 用 HEAD 生成 release/install-manifest.json
@@ -38,24 +38,14 @@ function listTracked(ref) {
   return out.toString('utf8').split(String.fromCharCode(0)).filter(Boolean);
 }
 
-/** 用一次 git cat-file --batch 取出所有 blob 的字节，返回 { rel: sha256 } */
+/** 用 git cat-file --filters 取“归档后”的字节，返回 { rel: sha256 } */
 function hashBlobs(ref, files) {
-  const input = files.map((rel) => `${ref}:${rel}`).join('\n') + '\n';
-  const out = execFileSync('git', ['-C', root, 'cat-file', '--batch'], { input, maxBuffer: 256 * 1024 * 1024 });
   const filesHash = {};
-  let offset = 0;
   for (const rel of files) {
-    const nl = out.indexOf(10, offset);
-    if (nl < 0) throw new Error(`git cat-file 输出不完整（${rel}）`);
-    const header = out.slice(offset, nl).toString('utf8');
-    const parts = header.split(' '); // <sha> <type> <size>
-    if (parts.length !== 3) throw new Error(`无法解析 blob 头：${header}（${rel}）`);
-    const size = Number(parts[2]);
-    const start = nl + 1;
-    const blob = out.subarray(start, start + size);
-    if (blob.length !== size) throw new Error(`blob 长度不符：${rel}`);
+    const blob = execFileSync('git', ['-C', root, 'cat-file', '--filters', `--path=${rel}`, `${ref}:${rel}`], {
+      maxBuffer: 64 * 1024 * 1024,
+    });
     filesHash[rel] = crypto.createHash('sha256').update(blob).digest('hex');
-    offset = start + size + 1; // 跳过 blob 后的换行
   }
   return filesHash;
 }

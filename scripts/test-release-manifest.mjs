@@ -35,21 +35,21 @@ ok(manifest.version === pkg.version, `清单版本与 package.json 一致（${ma
 const missing = keys.filter((rel) => !fs.existsSync(path.resolve(rel)));
 ok(missing.length === 0, '清单里的文件都存在', missing.slice(0, 5).join('、'));
 
-// ── 核心：清单哈希必须等于 git blob（= GitHub 归档字节），不能等于工作区文件 ──
-// 2026-10-30 事故：工作区 CRLF / git 提交 LF → 清单与发布包 92 处哈希不符。
+// ── 核心：清单哈希必须等于 GitHub 归档字节（.gitattributes eol 过滤后），不能等于工作区文件 ──
+// 2026-11-08 事故：裸 blob 是 LF，archive 里 *.bat/*.ps1 是 CRLF → 9 个 Windows 文件校验失败。
 {
   const crypto = await import('node:crypto');
-  const probe = ['.gitignore', 'README.en.md', 'docs/guides/VERSIONS.md', 'docs/guides/DSH_SETUP.md', 'package.json'];
+  const probe = ['.gitignore', 'README.en.md', 'docs/guides/VERSIONS.md', 'docs/guides/DSH_SETUP.md', 'package.json', 'start.bat', 'scripts/bootstrap.ps1'];
   let checked = 0; const bad = [];
   for (const rel of probe) {
     let blob;
-    try { blob = execFileSync('git', ['show', `HEAD:${rel}`], { maxBuffer: 32 * 1024 * 1024 }); } catch { continue; }
+    try { blob = execFileSync('git', ['cat-file', '--filters', `--path=${rel}`, `HEAD:${rel}`], { maxBuffer: 32 * 1024 * 1024 }); } catch { continue; }
     const hash = crypto.createHash('sha256').update(blob).digest('hex');
     checked += 1;
     if (manifest.files?.[rel] !== hash) bad.push(rel);
   }
-  ok(checked >= 3, `抽查 ${checked} 个文件的 blob 哈希`, '样本文件读不到');
-  ok(bad.length === 0, '清单哈希 == git blob 哈希（不是工作区文件）', bad.join('、'));
+  ok(checked >= 3, `抽查 ${checked} 个文件的归档字节哈希`, '样本文件读不到');
+  ok(bad.length === 0, '清单哈希 == GitHub 归档字节（不是工作区文件）', bad.join('、'));
 }
 
 // 发版硬门禁：清单与 HEAD 内容必须逐字节一致
